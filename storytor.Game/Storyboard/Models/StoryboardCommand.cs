@@ -1,4 +1,8 @@
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 namespace storytor.Game.Storyboard.Models
 {
     /// <summary>
@@ -294,6 +298,144 @@ namespace storytor.Game.Storyboard.Models
         public override string ToString()
         {
             return $"Color: ({StartRed},{StartGreen},{StartBlue}) -> ({EndRed},{EndGreen},{EndBlue}) ({StartTime}ms - {EndTime}ms)";
+        }
+    }
+
+    /// <summary>
+    /// Represents a loop command that repeats a set of commands
+    /// </summary>
+    public class LoopCommand : StoryboardCommand
+    {
+        /// <summary>
+        /// Number of times the loop executes
+        /// </summary>
+        public int LoopCount { get; set; }
+
+        /// <summary>
+        /// Commands to be repeated within the loop
+        /// </summary>
+        public List<StoryboardCommand> LoopCommands { get; set; } = new List<StoryboardCommand>();
+
+        public LoopCommand()
+        {
+            CommandType = "L";
+        }
+
+        /// <summary>
+        /// Expands the loop into individual commands with absolute timestamps
+        /// </summary>
+        /// <returns>List of expanded commands</returns>
+        public List<StoryboardCommand> ExpandLoop()
+        {
+            var expandedCommands = new List<StoryboardCommand>();
+
+            // Calculate loop duration based on the longest command inside the loop
+            var loopDuration = LoopCommands.Any() ? LoopCommands.Max(c => c.EndTime) : 0;
+
+            for (int iteration = 0; iteration < LoopCount; iteration++)
+            {
+                var iterationOffset = StartTime + (iteration * loopDuration);
+
+                foreach (var loopCommand in LoopCommands)
+                {
+                    var expandedCommand = cloneCommandWithOffset(loopCommand, iterationOffset);
+                    expandedCommands.Add(expandedCommand);
+                }
+            }
+
+            return expandedCommands;
+        }
+
+        private static StoryboardCommand cloneCommandWithOffset(StoryboardCommand original, int offset)
+        {
+            return original switch
+            {
+                FadeCommand fade => new FadeCommand
+                {
+                    Easing = fade.Easing,
+                    StartTime = fade.StartTime + offset,
+                    EndTime = fade.EndTime + offset,
+                    StartOpacity = fade.StartOpacity,
+                    EndOpacity = fade.EndOpacity
+                },
+                MoveCommand move => new MoveCommand
+                {
+                    Easing = move.Easing,
+                    StartTime = move.StartTime + offset,
+                    EndTime = move.EndTime + offset,
+                    StartX = move.StartX,
+                    StartY = move.StartY,
+                    EndX = move.EndX,
+                    EndY = move.EndY
+                },
+                ScaleCommand scale => new ScaleCommand
+                {
+                    Easing = scale.Easing,
+                    StartTime = scale.StartTime + offset,
+                    EndTime = scale.EndTime + offset,
+                    StartScale = scale.StartScale,
+                    EndScale = scale.EndScale
+                },
+                VectorScaleCommand vecScale => new VectorScaleCommand
+                {
+                    Easing = vecScale.Easing,
+                    StartTime = vecScale.StartTime + offset,
+                    EndTime = vecScale.EndTime + offset,
+                    StartScaleX = vecScale.StartScaleX,
+                    StartScaleY = vecScale.StartScaleY,
+                    EndScaleX = vecScale.EndScaleX,
+                    EndScaleY = vecScale.EndScaleY
+                },
+                RotateCommand rotate => new RotateCommand
+                {
+                    Easing = rotate.Easing,
+                    StartTime = rotate.StartTime + offset,
+                    EndTime = rotate.EndTime + offset,
+                    StartAngle = rotate.StartAngle,
+                    EndAngle = rotate.EndAngle
+                },
+                ColorCommand color => new ColorCommand
+                {
+                    Easing = color.Easing,
+                    StartTime = color.StartTime + offset,
+                    EndTime = color.EndTime + offset,
+                    StartRed = color.StartRed,
+                    StartGreen = color.StartGreen,
+                    StartBlue = color.StartBlue,
+                    EndRed = color.EndRed,
+                    EndGreen = color.EndGreen,
+                    EndBlue = color.EndBlue
+                },
+                ParameterCommand param => new ParameterCommand
+                {
+                    Easing = param.Easing,
+                    StartTime = param.StartTime + offset,
+                    EndTime = param.EndTime + offset,
+                    Parameter = param.Parameter
+                },
+                MoveXCommand moveX => new MoveXCommand
+                {
+                    Easing = moveX.Easing,
+                    StartTime = moveX.StartTime + offset,
+                    EndTime = moveX.EndTime + offset,
+                    StartX = moveX.StartX,
+                    EndX = moveX.EndX
+                },
+                MoveYCommand moveY => new MoveYCommand
+                {
+                    Easing = moveY.Easing,
+                    StartTime = moveY.StartTime + offset,
+                    EndTime = moveY.EndTime + offset,
+                    StartY = moveY.StartY,
+                    EndY = moveY.EndY
+                },
+                _ => throw new NotSupportedException($"Command type {original.GetType().Name} not supported in loops")
+            };
+        }
+
+        public override string ToString()
+        {
+            return $"Loop: {LoopCount} iterations, {LoopCommands.Count} commands ({StartTime}ms)";
         }
     }
 }

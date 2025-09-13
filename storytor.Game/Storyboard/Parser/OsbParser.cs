@@ -21,7 +21,7 @@ namespace storytor.Game.Storyboard.Parser
         public static async Task<StoryboardData> ParseAsync(string filePath)
         {
             string[] lines = await OsbFileReader.ReadOsbFileAsync(filePath);
-            return Parse(lines, filePath);
+            return parse(lines, filePath);
         }
         
         /// <summary>
@@ -32,7 +32,7 @@ namespace storytor.Game.Storyboard.Parser
         public static StoryboardData ParseFile(string filePath)
         {
             string[] lines = OsbFileReader.ReadOsbFile(filePath);
-            return Parse(lines, filePath);
+            return parse(lines, filePath);
         }
         
         /// <summary>
@@ -41,22 +41,23 @@ namespace storytor.Game.Storyboard.Parser
         /// <param name="lines">Lines from the OSB file</param>
         /// <param name="filePath">Original file path for reference</param>
         /// <returns>A parsed Storyboard object</returns>
-        private static StoryboardData Parse(string[] lines, string filePath)
+        private static StoryboardData parse(string[] lines, string filePath)
         {
             var storyboard = new StoryboardData { FilePath = filePath };
             StoryboardSprite currentSprite = null;
+            LoopCommand currentLoop = null;
             int spriteIdCounter = 0;
             
-            foreach (string line in lines)
+            for (int i = 0; i < lines.Length; i++)
             {
-                string trimmedLine = line.Trim();
+                string trimmedLine = lines[i].Trim();
                 
                 // Skip empty lines and comments
                 if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("//"))
                     continue;
                 
                 // Check if this is a sprite definition
-                if (IsSpriteDefinition(trimmedLine))
+                if (isSpriteDefinition(trimmedLine))
                 {
                     // Save previous sprite if it exists
                     if (currentSprite != null)
@@ -65,19 +66,64 @@ namespace storytor.Game.Storyboard.Parser
                     }
                     
                     // Parse new sprite
-                    currentSprite = ParseSprite(trimmedLine);
+                    currentSprite = parseSprite(trimmedLine);
                     if (currentSprite != null)
                     {
                         currentSprite.Id = spriteIdCounter++;
                     }
+                    currentLoop = null; // Reset loop when starting new sprite
                 }
                 else if (currentSprite != null)
                 {
-                    // Try to parse as a command for the current sprite
-                    var command = ParseCommand(trimmedLine);
-                    if (command != null)
+                    // Check if this is a loop command
+                    if (LoopCommandParser.IsLoopCommand(trimmedLine))
                     {
-                        currentSprite.Commands.Add(command);
+                        if (currentSprite?.ImagePath?.Contains("background.png") == true)
+                            Console.WriteLine($"🔄 Parsing Loop: {trimmedLine}");
+                        // Parse loop command
+                        currentLoop = LoopCommandParser.ParseLoopCommand(trimmedLine);
+                        if (currentLoop != null)
+                        {
+                            if (currentSprite?.ImagePath?.Contains("background.png") == true)
+                                Console.WriteLine($"✅ Loop parsed: StartTime={currentLoop.StartTime}, LoopCount={currentLoop.LoopCount}");
+                            currentSprite.Commands.Add(currentLoop);
+                        }
+                    }
+                    else if (currentLoop != null && lines[i].StartsWith("  "))
+                    {
+                        if (currentSprite?.ImagePath?.Contains("background.png") == true)
+                            Console.WriteLine($"📝 Loop nested command: {trimmedLine}");
+                        // We're inside a loop and the line is indented, parse nested commands
+                        var command = parseCommand(trimmedLine);
+                        if (command != null)
+                        {
+                            if (currentSprite?.ImagePath?.Contains("background.png") == true)
+                                Console.WriteLine($"✅ Added to loop: {command.GetType().Name}, StartTime={command.StartTime}, EndTime={command.EndTime}");
+                            currentLoop.LoopCommands.Add(command);
+                            
+                            // Update loop end time based on nested commands
+                            var commandEndTime = command.EndTime > 0 ? command.EndTime : command.StartTime;
+                            if (commandEndTime > currentLoop.EndTime - currentLoop.StartTime)
+                            {
+                                currentLoop.EndTime = currentLoop.StartTime + commandEndTime;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Not indented or not in a loop - this closes any current loop
+                        if (currentLoop != null && currentSprite?.ImagePath?.Contains("background.png") == true)
+                            Console.WriteLine($"🔚 Closing loop due to non-indented line: {trimmedLine}");
+                        currentLoop = null;
+                        
+                        // Regular command for the current sprite
+                        var command = parseCommand(trimmedLine);
+                        if (command != null)
+                        {
+                            if (currentSprite?.ImagePath?.Contains("background.png") == true)
+                                Console.WriteLine($"➕ Regular command: {command.GetType().Name}, StartTime={command.StartTime}, EndTime={command.EndTime}");
+                            currentSprite.Commands.Add(command);
+                        }
                     }
                 }
             }
@@ -94,7 +140,7 @@ namespace storytor.Game.Storyboard.Parser
         /// <summary>
         /// Checks if a line represents a sprite definition
         /// </summary>
-        private static bool IsSpriteDefinition(string line)
+        private static bool isSpriteDefinition(string line)
         {
             return line.StartsWith("Sprite,", StringComparison.OrdinalIgnoreCase);
         }
@@ -102,7 +148,7 @@ namespace storytor.Game.Storyboard.Parser
         /// <summary>
         /// Parses a sprite definition line
         /// </summary>
-        private static StoryboardSprite ParseSprite(string line)
+        private static StoryboardSprite parseSprite(string line)
         {
             // Format: Sprite,layer,origin,filepath,x,y
             string[] parts = line.Split(',');
@@ -115,7 +161,7 @@ namespace storytor.Game.Storyboard.Parser
                 var sprite = new StoryboardSprite
                 {
                     Layer = parts[1].Trim(),
-                    Origin = ParseOrigin(parts[2].Trim()),
+                    Origin = parseOrigin(parts[2].Trim()),
                     ImagePath = parts[3].Trim().Trim('"'), // Remove quotes if present
                 };
                 
@@ -141,7 +187,7 @@ namespace storytor.Game.Storyboard.Parser
         /// <summary>
         /// Parses the origin string to an Anchor enum
         /// </summary>
-        private static Anchor ParseOrigin(string origin)
+        private static Anchor parseOrigin(string origin)
         {
             return origin.ToLowerInvariant() switch
             {
@@ -161,7 +207,7 @@ namespace storytor.Game.Storyboard.Parser
         /// <summary>
         /// Attempts to parse a command from a line
         /// </summary>
-        private static StoryboardCommand ParseCommand(string line)
+        private static StoryboardCommand parseCommand(string line)
         {
             string trimmedLine = line.Trim();
             

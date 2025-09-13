@@ -233,8 +233,27 @@ namespace storytor.Game.Screens
             // Reset sprite to default state before applying commands
             resetSpriteToDefault(drawable, storyboardSprite);
 
+            // Expand loop commands into individual commands
+            var allCommands = new List<StoryboardCommand>();
+            foreach (var command in storyboardSprite.Commands)
+            {
+                if (command is LoopCommand loopCmd)
+                {
+                    //if (storyboardSprite.ImagePath?.Contains("background.png") == true)
+                    //    Console.WriteLine($"🔄 Expanding loop: StartTime={loopCmd.StartTime}, LoopCount={loopCmd.LoopCount}, NestedCommands={loopCmd.LoopCommands.Count}");
+                    var expandedCommands = loopCmd.ExpandLoop();
+                    //if (storyboardSprite.ImagePath?.Contains("background.png") == true)
+                    //    Console.WriteLine($"📈 Expanded to {expandedCommands.Count} commands");
+                    allCommands.AddRange(expandedCommands);
+                }
+                else
+                {
+                    allCommands.Add(command);
+                }
+            }
+
             // Process commands grouped by type to handle multiple commands properly
-            var commandsByType = storyboardSprite.Commands.GroupBy(c => c.GetType()).ToList();
+            var commandsByType = allCommands.GroupBy(c => c.GetType()).ToList();
 
 
             foreach (var commandGroup in commandsByType)
