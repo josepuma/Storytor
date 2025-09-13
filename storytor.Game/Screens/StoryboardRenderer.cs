@@ -5,11 +5,12 @@ using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
-using osu.Framework.Graphics.Primitives;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.Textures;
 using osu.Framework.Platform;
 using storytor.Game.Storyboard.Models;
+using storytor.Game.Storyboard.Utils;
+using storytor.Game.Storyboard.Processing;
 
 namespace storytor.Game.Screens
 {
@@ -26,7 +27,6 @@ namespace storytor.Game.Screens
         private readonly Dictionary<StoryboardSprite, AnimatedStoryboardSprite> spriteDrawables = new Dictionary<StoryboardSprite, AnimatedStoryboardSprite>();
         private readonly Dictionary<StoryboardSprite, List<StoryboardCommand>> expandedCommandsCache = new Dictionary<StoryboardSprite, List<StoryboardCommand>>();
         private readonly Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>> commandsByTypeCache = new Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>>();
-        private int updateCounter = 0;
         private Container storyboardContainer;
 
         public StoryboardRenderer(StoryboardData storyboard, string basePath)
@@ -147,7 +147,6 @@ namespace storytor.Game.Screens
         public void UpdateTime(double timeMs)
         {
             // Update all sprite animations
-            updateCounter++;
 
             foreach (var (storyboardSprite, drawable) in spriteDrawables)
             {
@@ -160,9 +159,7 @@ namespace storytor.Game.Screens
             Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>> commandsByTypeCache)
         {
             // Check if sprite should be visible at this time
-            var (start, end) = getSpriteLifetime(storyboardSprite);
-
-            if (timeMs < start || timeMs > end)
+            if (!SpriteLifetimeManager.IsSpriteVisible(storyboardSprite, timeMs))
             {
                 // Outside sprite lifetime - make invisible
                 drawable.Alpha = 0;
@@ -207,83 +204,82 @@ namespace storytor.Game.Screens
                 switch (commandGroup.Key.Name)
                 {
                     case nameof(FadeCommand):
-                        var fadeCmd = getActiveCommandOptimizedOptimized(commandsOfType.Cast<FadeCommand>(), timeMs);
+                        var fadeCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<FadeCommand>(), timeMs);
                         if (fadeCmd != null)
                         {
-                            var opacity = interpolateDoubleValue(timeMs, fadeCmd.StartTime, fadeCmd.EndTime, fadeCmd.StartOpacity, fadeCmd.EndOpacity, fadeCmd.Easing);
+                            var opacity = AnimationUtils.InterpolateDouble(timeMs, fadeCmd.StartTime, fadeCmd.EndTime, fadeCmd.StartOpacity, fadeCmd.EndOpacity, fadeCmd.Easing);
                             drawable.Alpha = Math.Clamp((float)opacity, 0f, 1f);
                         }
                         break;
 
                     case nameof(MoveCommand):
-                        var moveCmd = getActiveCommandOptimizedOptimized(commandsOfType.Cast<MoveCommand>(), timeMs);
+                        var moveCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<MoveCommand>(), timeMs);
                         if (moveCmd != null)
                         {
                             var xOffset = (854f - 640f) / 2f; // Same offset as initial position
                             var startPos = new osuTK.Vector2(moveCmd.StartX + xOffset, moveCmd.StartY);
                             var endPos = new osuTK.Vector2(moveCmd.EndX + xOffset, moveCmd.EndY);
-                            var currentPos = interpolateVector2Value(timeMs, moveCmd.StartTime, moveCmd.EndTime, startPos, endPos, moveCmd.Easing);
+                            var currentPos = AnimationUtils.InterpolateVector2(timeMs, moveCmd.StartTime, moveCmd.EndTime, startPos, endPos, moveCmd.Easing);
                             drawable.Position = currentPos;
                         }
                         break;
 
                     case nameof(ScaleCommand):
-                        var scaleCmd = getActiveCommandOptimizedOptimized(commandsOfType.Cast<ScaleCommand>(), timeMs);
+                        var scaleCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<ScaleCommand>(), timeMs);
                         if (scaleCmd != null)
                         {
-                            var scale = interpolateDoubleValue(timeMs, scaleCmd.StartTime, scaleCmd.EndTime, scaleCmd.StartScale, scaleCmd.EndScale, scaleCmd.Easing);
+                            var scale = AnimationUtils.InterpolateDouble(timeMs, scaleCmd.StartTime, scaleCmd.EndTime, scaleCmd.StartScale, scaleCmd.EndScale, scaleCmd.Easing);
                             drawable.Scale = new osuTK.Vector2((float)scale);
                         }
                         break;
 
                     case nameof(VectorScaleCommand):
-                        var vecScaleCmd = getActiveCommandOptimizedOptimized(commandsOfType.Cast<VectorScaleCommand>(), timeMs);
+                        var vecScaleCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<VectorScaleCommand>(), timeMs);
                         if (vecScaleCmd != null)
                         {
                             var startScale = new osuTK.Vector2(vecScaleCmd.StartScaleX, vecScaleCmd.StartScaleY);
                             var endScale = new osuTK.Vector2(vecScaleCmd.EndScaleX, vecScaleCmd.EndScaleY);
-                            var currentScale = interpolateVector2Value(timeMs, vecScaleCmd.StartTime, vecScaleCmd.EndTime, startScale, endScale, vecScaleCmd.Easing);
+                            var currentScale = AnimationUtils.InterpolateVector2(timeMs, vecScaleCmd.StartTime, vecScaleCmd.EndTime, startScale, endScale, vecScaleCmd.Easing);
                             drawable.Scale = currentScale;
                         }
                         break;
 
                     case nameof(RotateCommand):
-                        var rotateCmd = getActiveCommandOptimizedOptimized(commandsOfType.Cast<RotateCommand>(), timeMs);
+                        var rotateCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<RotateCommand>(), timeMs);
                         if (rotateCmd != null)
                         {
-                            var angleRad = interpolateDoubleValue(timeMs, rotateCmd.StartTime, rotateCmd.EndTime, rotateCmd.StartAngle, rotateCmd.EndAngle, rotateCmd.Easing);
+                            var angleRad = AnimationUtils.InterpolateDouble(timeMs, rotateCmd.StartTime, rotateCmd.EndTime, rotateCmd.StartAngle, rotateCmd.EndAngle, rotateCmd.Easing);
                             var angleDegrees = (float)(angleRad * 180.0 / Math.PI);
                             drawable.Rotation = angleDegrees;
                         }
                         break;
 
-
                     case nameof(MoveXCommand):
-                        var moveXCmd = getActiveCommandOptimizedOptimized(commandsOfType.Cast<MoveXCommand>(), timeMs);
+                        var moveXCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<MoveXCommand>(), timeMs);
                         if (moveXCmd != null)
                         {
                             var xOffset = (854f - 640f) / 2f;
-                            var currentX = interpolateDoubleValue(timeMs, moveXCmd.StartTime, moveXCmd.EndTime, moveXCmd.StartX + xOffset, moveXCmd.EndX + xOffset, moveXCmd.Easing);
+                            var currentX = AnimationUtils.InterpolateDouble(timeMs, moveXCmd.StartTime, moveXCmd.EndTime, moveXCmd.StartX + xOffset, moveXCmd.EndX + xOffset, moveXCmd.Easing);
                             drawable.Position = new osuTK.Vector2((float)currentX, drawable.Position.Y);
                         }
                         break;
 
                     case nameof(MoveYCommand):
-                        var moveYCmd = getActiveCommandOptimizedOptimized(commandsOfType.Cast<MoveYCommand>(), timeMs);
+                        var moveYCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<MoveYCommand>(), timeMs);
                         if (moveYCmd != null)
                         {
-                            var currentY = interpolateDoubleValue(timeMs, moveYCmd.StartTime, moveYCmd.EndTime, moveYCmd.StartY, moveYCmd.EndY, moveYCmd.Easing);
+                            var currentY = AnimationUtils.InterpolateDouble(timeMs, moveYCmd.StartTime, moveYCmd.EndTime, moveYCmd.StartY, moveYCmd.EndY, moveYCmd.Easing);
                             drawable.Position = new osuTK.Vector2(drawable.Position.X, (float)currentY);
                         }
                         break;
 
                     case nameof(ColorCommand):
-                        var colorCmd = getActiveCommandOptimizedOptimized(commandsOfType.Cast<ColorCommand>(), timeMs);
+                        var colorCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<ColorCommand>(), timeMs);
                         if (colorCmd != null)
                         {
-                            var currentRed = interpolateDoubleValue(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartRed, colorCmd.EndRed, colorCmd.Easing);
-                            var currentGreen = interpolateDoubleValue(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartGreen, colorCmd.EndGreen, colorCmd.Easing);
-                            var currentBlue = interpolateDoubleValue(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartBlue, colorCmd.EndBlue, colorCmd.Easing);
+                            var currentRed = AnimationUtils.InterpolateDouble(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartRed, colorCmd.EndRed, colorCmd.Easing);
+                            var currentGreen = AnimationUtils.InterpolateDouble(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartGreen, colorCmd.EndGreen, colorCmd.Easing);
+                            var currentBlue = AnimationUtils.InterpolateDouble(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartBlue, colorCmd.EndBlue, colorCmd.Easing);
 
                             var red = Math.Clamp((float)(currentRed / 255.0), 0f, 1f);
                             var green = Math.Clamp((float)(currentGreen / 255.0), 0f, 1f);
@@ -297,7 +293,8 @@ namespace storytor.Game.Screens
 
                     case nameof(ParameterCommand):
                         // Apply active parameter commands (parameters only apply while active)
-                        var activeParameterCmds = getActiveParameterCommands(commandsOfType.Cast<ParameterCommand>(), timeMs, allCommands);
+                        var (spriteStart, spriteEnd) = SpriteLifetimeManager.GetSpriteLifetime(storyboardSprite);
+                        var activeParameterCmds = CommandProcessor.GetActiveParameterCommands(commandsOfType.Cast<ParameterCommand>(), timeMs, spriteStart, spriteEnd);
 
                         foreach (var paramCmd in activeParameterCmds)
                         {
@@ -325,31 +322,6 @@ namespace storytor.Game.Screens
             }
         }
 
-        private static (double Start, double End) getSpriteLifetime(StoryboardSprite sprite)
-        {
-            if (sprite.Commands.Count == 0)
-                return (0, 0); // No commands = no lifetime
-
-            var startTime = sprite.Commands.Min(c => c.StartTime);
-            
-            // Only consider normal commands (not persistent ones) for end time
-            var normalCommands = sprite.Commands.Where(c => c.EndTime != int.MaxValue).ToList();
-            
-            double endTime;
-            if (normalCommands.Count > 0)
-            {
-                // Use the latest end time from normal commands
-                endTime = normalCommands.Max(c => c.EndTime);
-            }
-            else
-            {
-                // All commands are persistent - sprite should be visible from first start time onward
-                // But this is unusual, typically there should be at least one normal command
-                endTime = startTime; // Minimal lifetime
-            }
-
-            return (startTime, endTime);
-        }
 
         private static void setInitialSpriteState(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite)
         {
@@ -454,199 +426,8 @@ namespace storytor.Game.Screens
         }
 
 
-        /// <summary>
-        /// Generic function to get the active command at a given time
-        /// </summary>
-        private static T getActiveCommandOptimized<T>(IEnumerable<T> commands, double timeMs) where T : StoryboardCommand
-        {
-            // Find active command (currently executing)
-            var activeCommand = commands
-                .Where(cmd => timeMs >= cmd.StartTime && timeMs <= cmd.EndTime)
-                .OrderByDescending(cmd => cmd.StartTime)
-                .FirstOrDefault();
 
-            if (activeCommand != null)
-                return activeCommand;
 
-            // If no active command, use the end state of the last completed command
-            var lastCompletedCommand = commands
-                .Where(cmd => timeMs > cmd.EndTime)
-                .OrderByDescending(cmd => cmd.EndTime)
-                .FirstOrDefault();
-
-            return lastCompletedCommand;
-        }
-
-        private static T getActiveCommandOptimizedOptimized<T>(IEnumerable<T> commands, double timeMs) where T : StoryboardCommand
-        {
-            var commandList = commands as List<T> ?? commands.ToList();
-            if (commandList.Count == 0) return null;
-
-            // Sort commands by start time to process in chronological order
-            var sortedCommands = commandList.OrderBy(c => c.StartTime).ToList();
-            
-            T activeCommand = null;
-            
-            // Process commands chronologically to find what should be active at timeMs
-            for (int i = 0; i < sortedCommands.Count; i++)
-            {
-                var cmd = sortedCommands[i];
-                
-                if (cmd.EndTime == int.MaxValue)
-                {
-                    // Persistent command: starts at StartTime and continues until overridden
-                    if (timeMs >= cmd.StartTime)
-                    {
-                        activeCommand = cmd;
-                        
-                        // Check if this persistent command is later overridden by any command
-                        for (int j = i + 1; j < sortedCommands.Count; j++)
-                        {
-                            var laterCmd = sortedCommands[j];
-                            if (timeMs >= laterCmd.StartTime)
-                            {
-                                // This later command overrides the persistent one
-                                activeCommand = laterCmd;
-                                // Don't break here, continue checking for even later commands
-                            }
-                            else
-                            {
-                                // We've reached commands that haven't started yet
-                                break;
-                            }
-                        }
-                        break; // We found our persistent command and checked all overrides
-                    }
-                }
-                else
-                {
-                    // Normal command: active within its time range
-                    if (timeMs >= cmd.StartTime && timeMs <= cmd.EndTime)
-                    {
-                        activeCommand = cmd;
-                        // Don't break, continue checking for later commands that might override
-                    }
-                    else if (timeMs > cmd.EndTime)
-                    {
-                        // Command has ended, keep it as potential fallback
-                        activeCommand = cmd;
-                    }
-                }
-            }
-
-            return activeCommand;
-        }
-
-        /// <summary>
-        /// Gets active parameter commands, handling persistent parameters correctly
-        /// Single persistent parameters apply for the entire sprite lifetime, ignoring their StartTime
-        /// </summary>
-        private static List<ParameterCommand> getActiveParameterCommands(IEnumerable<ParameterCommand> parameterCommands, double timeMs, IEnumerable<StoryboardCommand> allCommands)
-        {
-            var paramList = parameterCommands.ToList();
-            var activeParams = new List<ParameterCommand>();
-            
-            if (!paramList.Any()) return activeParams;
-            
-            // Calculate sprite's lifetime from all commands (excluding parameters)
-            var nonParamCommands = allCommands.Where(c => !(c is ParameterCommand)).ToList();
-            if (!nonParamCommands.Any()) return activeParams;
-            
-            var spriteStartTime = nonParamCommands.Min(c => c.StartTime);
-            var spriteEndTime = nonParamCommands.Max(c => c.EndTime);
-            
-            // Group parameters by type
-            var paramGroups = paramList.GroupBy(p => p.Parameter);
-            
-            foreach (var group in paramGroups)
-            {
-                var paramsOfType = group.OrderBy(p => p.StartTime).ToList();
-                
-                // Special case: if there's only one parameter of this type and it's persistent,
-                // it applies for the entire sprite lifetime (ignoring StartTime)
-                if (paramsOfType.Count == 1 && paramsOfType[0].EndTime == int.MaxValue)
-                {
-                    // Single persistent parameter: active during entire sprite lifetime
-                    if (timeMs >= spriteStartTime && timeMs <= spriteEndTime)
-                    {
-                        activeParams.Add(paramsOfType[0]);
-                    }
-                }
-                else
-                {
-                    // Multiple parameters or non-persistent: use normal timing logic
-                    foreach (var param in paramsOfType)
-                    {
-                        bool isActive = false;
-                        
-                        if (param.EndTime == int.MaxValue)
-                        {
-                            // Persistent parameter: active from StartTime until replaced or sprite ends
-                            if (timeMs >= param.StartTime && timeMs <= spriteEndTime)
-                            {
-                                // Check if replaced by a later parameter
-                                var laterParam = paramsOfType
-                                    .FirstOrDefault(p => p.StartTime > param.StartTime && timeMs >= p.StartTime);
-                                
-                                isActive = (laterParam == null);
-                            }
-                        }
-                        else
-                        {
-                            // Normal parameter: active within its time range
-                            isActive = (timeMs >= param.StartTime && timeMs <= param.EndTime);
-                        }
-                        
-                        if (isActive)
-                        {
-                            activeParams.Add(param);
-                            break; // Only one parameter of each type can be active
-                        }
-                    }
-                }
-            }
-            
-            return activeParams;
-        }
-
-        /// <summary>
-        /// Generic interpolation function for commands with double values
-        /// </summary>
-        private static double interpolateDoubleValue(double timeMs, int startTime, int endTime, double startValue, double endValue, int easing)
-        {
-            if (timeMs < startTime) return startValue;
-            if (timeMs >= endTime) return endValue;
-
-            var progress = (timeMs - startTime) / (endTime - startTime);
-            var easedProgress = applyEasing(progress, easing);
-            return startValue + (endValue - startValue) * easedProgress;
-        }
-
-        /// <summary>
-        /// Generic interpolation function for commands with Vector2 values
-        /// </summary>
-        private static osuTK.Vector2 interpolateVector2Value(double timeMs, int startTime, int endTime,
-            osuTK.Vector2 startValue, osuTK.Vector2 endValue, int easing)
-        {
-            if (timeMs < startTime) return startValue;
-            if (timeMs >= endTime) return endValue;
-
-            var progress = (timeMs - startTime) / (endTime - startTime);
-            var easedProgress = applyEasing(progress, easing);
-            return startValue + (endValue - startValue) * (float)easedProgress;
-        }
-
-        private static double applyEasing(double progress, int easingType)
-        {
-            return easingType switch
-            {
-                0 => progress, // Linear
-                1 => 1 - Math.Pow(1 - progress, 2), // Out
-                2 => Math.Pow(progress, 2), // In
-                3 => progress < 0.5 ? 2 * progress * progress : 1 - Math.Pow(-2 * progress + 2, 2) / 2, // InOut
-                _ => progress // Default to linear
-            };
-        }
 
         protected override void Update()
         {
