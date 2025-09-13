@@ -18,6 +18,7 @@ using osu.Framework.Screens;
 using osuTK.Input;
 using storytor.Game.Storyboard;
 using storytor.Game.Storyboard.Models;
+using storytor.Game.Components;
 
 namespace storytor.Game.Screens
 {
@@ -38,6 +39,7 @@ namespace storytor.Game.Screens
         private Track currentTrack;
         private StoryboardData currentStoryboard;
         private StoryboardRenderer storyboardRenderer;
+        private TimelineComponent timeline;
         
         [BackgroundDependencyLoader]
         private void load()
@@ -130,17 +132,21 @@ namespace storytor.Game.Screens
                             }
                         },
                         
-                        // Status text at bottom
+                        // Status text at bottom (moved up for timeline)
                         statusText = new SpriteText
                         {
                             Text = "Ready to load a beatmap folder...",
                             Font = FontUsage.Default.With(size: 14),
                             Colour = Colour4.White,
                             Anchor = Anchor.BottomLeft,
-                            Origin = Anchor.BottomLeft
+                            Origin = Anchor.BottomLeft,
+                            Margin = new MarginPadding { Bottom = 50 }
                         }
                     }
-                }
+                },
+                
+                // Timeline component at bottom
+                timeline = new TimelineComponent()
             };
         }
         
@@ -148,12 +154,15 @@ namespace storytor.Game.Screens
         {
             base.Update();
             
-            // Update time display
+            // Update time display and timeline
             if (currentTrack != null)
             {
                 var current = TimeSpan.FromMilliseconds(currentTrack.CurrentTime);
                 var total = TimeSpan.FromMilliseconds(currentTrack.Length);
                 timeDisplay.Text = $"{current:mm\\:ss} / {total:mm\\:ss}";
+                
+                // Update timeline progress
+                timeline.UpdateProgress(currentTrack.CurrentTime);
                 
                 // Update storyboard renderer with current time
                 storyboardRenderer?.UpdateTime(currentTrack.CurrentTime);
@@ -417,6 +426,13 @@ namespace storytor.Game.Screens
                     Console.WriteLine($"Loading audio file: {audioFileName} from custom track store");
                     currentTrack = customTrackStore.Get(audioFileName);
                     
+                    // Setup timeline with track
+                    if (currentTrack != null)
+                    {
+                        timeline.SetTrack(currentTrack);
+                        timeline.OnSeek += seekToTime;
+                    }
+                    
                     if (currentTrack == null)
                     {
                         statusText.Text = $"Failed to load: {audioFileName}. Trying fallback method...";
@@ -438,6 +454,10 @@ namespace storytor.Game.Screens
                             if (currentTrack != null)
                             {
                                 Console.WriteLine("Successfully loaded using Resources/Tracks/ fallback");
+                                
+                                // Setup timeline with track
+                                timeline.SetTrack(currentTrack);
+                                timeline.OnSeek += seekToTime;
                                 
                                 // Clean up temp file after track is loaded
                                 // Note: We'll clean it up in Dispose()
@@ -586,6 +606,14 @@ namespace storytor.Game.Screens
             if (currentTrack == null) return;
 
             var newTime = Math.Max(0, Math.Min(currentTrack.Length, currentTrack.CurrentTime + deltaMs));
+            currentTrack.Seek(newTime);
+        }
+
+        private void seekToTime(double absoluteTimeMs)
+        {
+            if (currentTrack == null) return;
+
+            var newTime = Math.Max(0, Math.Min(currentTrack.Length, absoluteTimeMs));
             currentTrack.Seek(newTime);
         }
         
