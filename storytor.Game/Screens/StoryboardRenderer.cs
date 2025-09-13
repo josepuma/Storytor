@@ -1,0 +1,500 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using osu.Framework.Allocation;
+using osu.Framework.Graphics;
+using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Sprites;
+using osu.Framework.Graphics.Textures;
+using osu.Framework.Platform;
+using storytor.Game.Storyboard.Models;
+
+namespace storytor.Game.Screens
+{
+    /// <summary>
+    /// Renders a storyboard with proper timing and sprite management
+    /// </summary>
+    public partial class StoryboardRenderer : Container
+    {
+        [Resolved]
+        private GameHost host { get; set; } = null!;
+
+        private readonly StoryboardData storyboard;
+        private readonly string basePath;
+        private readonly Dictionary<StoryboardSprite, AnimatedStoryboardSprite> spriteDrawables = new Dictionary<StoryboardSprite, AnimatedStoryboardSprite>();
+        private int updateCounter = 0;
+        private Container storyboardContainer;
+
+        public StoryboardRenderer(StoryboardData storyboard, string basePath)
+        {
+            this.storyboard = storyboard;
+            this.basePath = basePath;
+
+            // Configure storyboard container to fill the entire screen
+            RelativeSizeAxes = Axes.Both;
+
+            // Create a inner container for osu! coordinate system (854x480)
+            // that scales to fit the screen height and maintains aspect ratio
+            storyboardContainer = new Container
+            {
+                Size = new osuTK.Vector2(854, 480), // osu! storyboard dimensions (16:9)
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                Name = "StoryboardCoordinateContainer"
+            };
+            Add(storyboardContainer);
+        }
+
+        [BackgroundDependencyLoader]
+        private void load()
+        {
+            Console.WriteLine($"Initializing storyboard renderer for: {basePath}");
+
+            // Create drawable sprites for each storyboard sprite
+            foreach (var storyboardSprite in storyboard.Sprites)
+            {
+                try
+                {
+                    var drawable = createDrawableSprite(storyboardSprite);
+                    if (drawable != null)
+                    {
+                        spriteDrawables[storyboardSprite] = drawable;
+                        storyboardContainer.Add(drawable);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to create drawable for sprite {storyboardSprite.ImagePath}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine($"Created {spriteDrawables.Count} drawable sprites");
+        }
+
+        private AnimatedStoryboardSprite createDrawableSprite(StoryboardSprite storyboardSprite)
+        {
+            //Console.WriteLine($"Creating sprite for: '{storyboardSprite.ImagePath}'");
+
+            // Clean and normalize the image path
+            var cleanImagePath = storyboardSprite.ImagePath?.Trim().Trim('"') ?? "";
+
+            if (string.IsNullOrEmpty(cleanImagePath))
+            {
+                Console.WriteLine("ERROR: Empty image path for sprite!");
+                return null;
+            }
+
+            // Try different path combinations
+            var possiblePaths = new[]
+            {
+                Path.Combine(basePath, cleanImagePath.Replace('\\', '/')),
+                Path.Combine(basePath, cleanImagePath.Replace('/', '\\')),
+                Path.Combine(basePath, Path.GetFileName(cleanImagePath)),
+                Path.Combine(basePath, "sb", cleanImagePath.Replace('\\', '/')),
+                Path.Combine(basePath, "SB", cleanImagePath.Replace('\\', '/')),
+                cleanImagePath // Try absolute path
+            };
+
+            string foundPath = null;
+            foreach (var path in possiblePaths)
+            {
+                //Console.WriteLine($"Trying path: {path}");
+                if (File.Exists(path))
+                {
+                    foundPath = path;
+                    //Console.WriteLine($"✅ Found image at: {path}");
+                    break;
+                }
+            }
+
+            if (foundPath == null)
+            {
+                Console.WriteLine($"❌ Image not found anywhere. Searched:");
+                foreach (var path in possiblePaths)
+                {
+                    Console.WriteLine($"   - {path}");
+                }
+
+                // List files in the base directory for debugging
+                Console.WriteLine($"Files in base directory ({basePath}):");
+                try
+                {
+                    var files = Directory.GetFiles(basePath, "*.*", SearchOption.AllDirectories);
+                    foreach (var file in files.Take(10)) // Show first 10 files
+                    {
+                        //Console.WriteLine($"   - {Path.GetRelativePath(basePath, file)}");
+                    }
+                    if (files.Length > 10)
+                    {
+                       //Console.WriteLine($"   ... and {files.Length - 10} more files");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"   Error listing files: {ex.Message}");
+                }
+
+                return null;
+            }
+
+            try
+            {
+                // Load texture directly from file using framework texture creation
+                Texture texture = null;
+
+                // Method 1: Try to load with osu!framework's Texture.FromStream
+                try
+                {
+                    using var stream = File.OpenRead(foundPath);
+                    texture = Texture.FromStream(host.Renderer, stream);
+                    //Console.WriteLine($"✅ Loaded texture using Texture.FromStream: {foundPath}");
+                }
+                catch (Exception streamEx)
+                {
+                    Console.WriteLine($"Texture.FromStream failed: {streamEx.Message}");
+                }
+
+                if (texture == null)
+                {
+                    Console.WriteLine($"❌ All texture loading methods failed for: {foundPath}");
+                    return null;
+                }
+
+                //Console.WriteLine($"✅ Successfully loaded texture: {foundPath}");
+
+                // Create animated sprite with adjusted coordinates for 16:9 container
+                // osu! coordinates are based on 640x480, but we use 854x480
+                // So we need to offset X coordinates to center the 640-wide content in 854-wide container
+                var xOffset = (854f - 640f) / 2f; // 107 pixels offset to center
+                var adjustedX = storyboardSprite.X + xOffset;
+
+                var drawable = new AnimatedStoryboardSprite(storyboardSprite, texture)
+                {
+                    Position = new osuTK.Vector2(adjustedX, storyboardSprite.Y),
+                    Origin = storyboardSprite.Origin,
+                    Alpha = 0 // Start invisible, will be controlled by fade commands
+                };
+
+                // Set initial state based on first commands to avoid sudden jumps
+                setInitialSpriteState(drawable, storyboardSprite);
+
+                return drawable;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error loading sprite {foundPath}: {ex.Message}");
+                Console.WriteLine($"Exception details: {ex}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Updates the renderer with the current audio time
+        /// </summary>
+        /// <param name="timeMs">Current time in milliseconds</param>
+        public void UpdateTime(double timeMs)
+        {
+            // Update all sprite animations
+            updateCounter++;
+            if (updateCounter % 60 == 0) // Log every 60 frames (~1 second)
+            {
+                //Console.WriteLine($"UpdateTime: {timeMs}ms, {spriteDrawables.Count} sprites");
+            }
+
+            foreach (var (storyboardSprite, drawable) in spriteDrawables)
+            {
+                updateSpriteAtTime(drawable, storyboardSprite, timeMs);
+            }
+        }
+
+        private static void updateSpriteAtTime(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite, double timeMs)
+        {
+            // Check if sprite should be visible at this time
+            var (start, end) = getSpriteLifetime(storyboardSprite);
+
+            if (storyboardSprite.ImagePath.Contains("light1"))
+            {
+                //Console.WriteLine($"Sprite {storyboardSprite.ImagePath}: time={timeMs}, lifetime=({start}-{end}), commands={storyboardSprite.Commands.Count}");
+            }
+
+            if (timeMs < start || timeMs > end)
+            {
+                // Outside sprite lifetime - make invisible
+                drawable.Alpha = 0;
+                if (storyboardSprite.ImagePath.Contains("light1"))
+                {
+                    //Console.WriteLine($"  -> Making {storyboardSprite.ImagePath} invisible (outside lifetime)");
+                }
+                return;
+            }
+
+            // Reset sprite to default state before applying commands
+            resetSpriteToDefault(drawable, storyboardSprite);
+
+            // Process commands grouped by type to handle multiple commands properly
+            var commandsByType = storyboardSprite.Commands.GroupBy(c => c.GetType()).ToList();
+
+
+            foreach (var commandGroup in commandsByType)
+            {
+                var commandsOfType = commandGroup.OrderBy(c => c.StartTime).ToList();
+
+                switch (commandGroup.Key.Name)
+                {
+                    case nameof(FadeCommand):
+                        var fadeCmd = getActiveCommand(commandsOfType.Cast<FadeCommand>(), timeMs);
+                        if (fadeCmd != null)
+                        {
+                            var opacity = interpolateDoubleValue(timeMs, fadeCmd.StartTime, fadeCmd.EndTime, fadeCmd.StartOpacity, fadeCmd.EndOpacity, fadeCmd.Easing);
+                            drawable.Alpha = Math.Clamp((float)opacity, 0f, 1f);
+                        }
+                        break;
+
+                    case nameof(MoveCommand):
+                        var moveCmd = getActiveCommand(commandsOfType.Cast<MoveCommand>(), timeMs);
+                        if (moveCmd != null)
+                        {
+                            var xOffset = (854f - 640f) / 2f; // Same offset as initial position
+                            var startPos = new osuTK.Vector2(moveCmd.StartX + xOffset, moveCmd.StartY);
+                            var endPos = new osuTK.Vector2(moveCmd.EndX + xOffset, moveCmd.EndY);
+                            var currentPos = interpolateVector2Value(timeMs, moveCmd.StartTime, moveCmd.EndTime, startPos, endPos, moveCmd.Easing);
+                            drawable.Position = currentPos;
+                        }
+                        break;
+
+                    case nameof(ScaleCommand):
+                        var scaleCmd = getActiveCommand(commandsOfType.Cast<ScaleCommand>(), timeMs);
+                        if (scaleCmd != null)
+                        {
+                            var scale = interpolateDoubleValue(timeMs, scaleCmd.StartTime, scaleCmd.EndTime, scaleCmd.StartScale, scaleCmd.EndScale, scaleCmd.Easing);
+                            drawable.Scale = new osuTK.Vector2((float)scale);
+                        }
+                        break;
+
+                    case nameof(VectorScaleCommand):
+                        var vecScaleCmd = getActiveCommand(commandsOfType.Cast<VectorScaleCommand>(), timeMs);
+                        if (vecScaleCmd != null)
+                        {
+                            var startScale = new osuTK.Vector2(vecScaleCmd.StartScaleX, vecScaleCmd.StartScaleY);
+                            var endScale = new osuTK.Vector2(vecScaleCmd.EndScaleX, vecScaleCmd.EndScaleY);
+                            var currentScale = interpolateVector2Value(timeMs, vecScaleCmd.StartTime, vecScaleCmd.EndTime, startScale, endScale, vecScaleCmd.Easing);
+                            drawable.Scale = currentScale;
+                        }
+                        break;
+
+                    case nameof(RotateCommand):
+                        var rotateCmd = getActiveCommand(commandsOfType.Cast<RotateCommand>(), timeMs);
+                        if (rotateCmd != null)
+                        {
+                            var angleRad = interpolateDoubleValue(timeMs, rotateCmd.StartTime, rotateCmd.EndTime, rotateCmd.StartAngle, rotateCmd.EndAngle, rotateCmd.Easing);
+                            var angleDegrees = (float)(angleRad * 180.0 / Math.PI);
+                            drawable.Rotation = angleDegrees;
+                        }
+                        break;
+
+                    default:
+                        Console.WriteLine($"Unknown command type: {commandGroup.Key.Name}");
+                        break;
+                }
+            }
+        }
+
+        private static (double Start, double End) getSpriteLifetime(StoryboardSprite sprite)
+        {
+            if (sprite.Commands.Count == 0)
+                return (0, 0); // No commands = no lifetime
+
+            var startTime = sprite.Commands.Min(c => c.StartTime);
+            var endTime = sprite.Commands.Max(c => c.EndTime);
+
+            return (startTime, endTime);
+        }
+
+        private static void setInitialSpriteState(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite)
+        {
+            // Both initial state and reset use the same logic to prevent sudden jumps
+            applySpriteBaseState(drawable, storyboardSprite);
+        }
+
+        private static void resetSpriteToDefault(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite)
+        {
+            // Reset to sprite's initial state (same as setInitialSpriteState)
+            applySpriteBaseState(drawable, storyboardSprite);
+        }
+
+        private static void applySpriteBaseState(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite)
+        {
+            var xOffset = (854f - 640f) / 2f;
+
+            // Find first command of each type to get initial values
+            var firstFade = storyboardSprite.Commands.OfType<FadeCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
+            var firstMove = storyboardSprite.Commands.OfType<MoveCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
+            var firstScale = storyboardSprite.Commands.OfType<ScaleCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
+            var firstVectorScale = storyboardSprite.Commands.OfType<VectorScaleCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
+            var firstRotate = storyboardSprite.Commands.OfType<RotateCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
+
+            // Set position (use first move command start position if available)
+            if (firstMove != null)
+            {
+                drawable.Position = new osuTK.Vector2(firstMove.StartX + xOffset, firstMove.StartY);
+            }
+            else
+            {
+                drawable.Position = new osuTK.Vector2(storyboardSprite.X + xOffset, storyboardSprite.Y);
+            }
+
+            // Set alpha (use first fade command start value if available)
+            if (firstFade != null)
+            {
+                drawable.Alpha = Math.Clamp((float)firstFade.StartOpacity, 0f, 1f);
+            }
+            else
+            {
+                drawable.Alpha = 1.0f; // Default visible
+            }
+
+            // Set scale (prioritize vector scale over uniform scale)
+            if (firstVectorScale != null)
+            {
+                drawable.Scale = new osuTK.Vector2(firstVectorScale.StartScaleX, firstVectorScale.StartScaleY);
+            }
+            else if (firstScale != null)
+            {
+                drawable.Scale = new osuTK.Vector2((float)firstScale.StartScale);
+            }
+            else
+            {
+                drawable.Scale = new osuTK.Vector2(1.0f); // Default scale
+            }
+
+            // Set rotation
+            if (firstRotate != null)
+            {
+                var angleDegrees = (float)(firstRotate.StartAngle * 180.0 / Math.PI);
+                drawable.Rotation = angleDegrees;
+            }
+            else
+            {
+                drawable.Rotation = 0.0f; // Default rotation
+            }
+        }
+
+
+        /// <summary>
+        /// Generic function to get the active command at a given time
+        /// </summary>
+        private static T getActiveCommand<T>(IEnumerable<T> commands, double timeMs) where T : StoryboardCommand
+        {
+            // Find active command (currently executing)
+            var activeCommand = commands
+                .Where(cmd => timeMs >= cmd.StartTime && timeMs <= cmd.EndTime)
+                .OrderByDescending(cmd => cmd.StartTime)
+                .FirstOrDefault();
+
+            if (activeCommand != null)
+                return activeCommand;
+
+            // If no active command, use the end state of the last completed command
+            var lastCompletedCommand = commands
+                .Where(cmd => timeMs > cmd.EndTime)
+                .OrderByDescending(cmd => cmd.EndTime)
+                .FirstOrDefault();
+
+            return lastCompletedCommand;
+        }
+
+        /// <summary>
+        /// Generic interpolation function for commands with double values
+        /// </summary>
+        private static double interpolateDoubleValue(double timeMs, int startTime, int endTime, double startValue, double endValue, int easing)
+        {
+            if (timeMs < startTime) return startValue;
+            if (timeMs >= endTime) return endValue;
+
+            var progress = (timeMs - startTime) / (endTime - startTime);
+            var easedProgress = applyEasing(progress, easing);
+            return startValue + (endValue - startValue) * easedProgress;
+        }
+
+        /// <summary>
+        /// Generic interpolation function for commands with Vector2 values
+        /// </summary>
+        private static osuTK.Vector2 interpolateVector2Value(double timeMs, int startTime, int endTime,
+            osuTK.Vector2 startValue, osuTK.Vector2 endValue, int easing)
+        {
+            if (timeMs < startTime) return startValue;
+            if (timeMs >= endTime) return endValue;
+
+            var progress = (timeMs - startTime) / (endTime - startTime);
+            var easedProgress = applyEasing(progress, easing);
+            return startValue + (endValue - startValue) * (float)easedProgress;
+        }
+
+        private static double applyEasing(double progress, int easingType)
+        {
+            return easingType switch
+            {
+                0 => progress, // Linear
+                1 => 1 - Math.Pow(1 - progress, 2), // Out
+                2 => Math.Pow(progress, 2), // In
+                3 => progress < 0.5 ? 2 * progress * progress : 1 - Math.Pow(-2 * progress + 2, 2) / 2, // InOut
+                _ => progress // Default to linear
+            };
+        }
+
+        protected override void Update()
+        {
+            base.Update();
+
+            // Update container scale to maintain aspect ratio while fitting screen
+            updateContainerScale();
+        }
+
+        private void updateContainerScale()
+        {
+            if (storyboardContainer == null) return;
+
+            // Calculate scale to fit the screen while maintaining 854x480 aspect ratio (16:9)
+            var screenSize = DrawSize;
+            var targetAspectRatio = 854f / 480f;
+            var screenAspectRatio = screenSize.X / screenSize.Y;
+
+            float scale;
+            if (screenAspectRatio > targetAspectRatio)
+            {
+                // Screen is wider - scale to fit height
+                scale = screenSize.Y / 480f;
+            }
+            else
+            {
+                // Screen is taller - scale to fit width
+                scale = screenSize.X / 854f;
+            }
+
+            storyboardContainer.Scale = new osuTK.Vector2(scale);
+        }
+    }
+
+    /// <summary>
+    /// A drawable sprite that can be animated based on storyboard commands
+    /// </summary>
+    public partial class AnimatedStoryboardSprite : Sprite
+    {
+        public StoryboardSprite StoryboardData { get; }
+
+        public AnimatedStoryboardSprite(StoryboardSprite storyboardData, Texture texture)
+        {
+            StoryboardData = storyboardData;
+            Texture = texture;
+
+            // Set initial properties
+            Name = $"Sprite: {storyboardData.DisplayName}";
+        }
+
+        public override string ToString()
+        {
+            return $"AnimatedSprite: {StoryboardData.DisplayName} at ({Position.X}, {Position.Y})";
+        }
+    }
+}

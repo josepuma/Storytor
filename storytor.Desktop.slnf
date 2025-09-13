@@ -1,0 +1,11 @@
+﻿{
+  "solution": {
+    "path": "storytor.sln",
+    "projects": [
+      "storytor.Desktop\\storytor.Desktop.csproj",
+      "storytor.Game\\storytor.Game.csproj",
+      "storytor.Game.Tests\\storytor.Game.Tests.csproj",
+      "storytor.Resources\\storytor.Resources.csproj"
+    ]
+  }
+}

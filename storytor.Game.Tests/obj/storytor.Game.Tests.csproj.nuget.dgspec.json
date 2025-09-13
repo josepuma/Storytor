@@ -1,0 +1,206 @@
+{
+  "format": 1,
+  "restore": {
+    "/Users/josepuma/Documents/Github/storytor/storytor.Game.Tests/storytor.Game.Tests.csproj": {}
+  },
+  "projects": {
+    "/Users/josepuma/Documents/Github/storytor/storytor.Game.Tests/storytor.Game.Tests.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/josepuma/Documents/Github/storytor/storytor.Game.Tests/storytor.Game.Tests.csproj",
+        "projectName": "storytor.Game.Tests",
+        "projectPath": "/Users/josepuma/Documents/Github/storytor/storytor.Game.Tests/storytor.Game.Tests.csproj",
+        "packagesPath": "/Users/josepuma/.nuget/packages/",
+        "outputPath": "/Users/josepuma/Documents/Github/storytor/storytor.Game.Tests/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/josepuma/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "/Users/josepuma/Documents/Github/storytor/storytor.Game/storytor.Game.csproj": {
+                "projectPath": "/Users/josepuma/Documents/Github/storytor/storytor.Game/storytor.Game.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "Microsoft.NET.Test.Sdk": {
+              "target": "Package",
+              "version": "[17.0.0, )"
+            },
+            "NUnit3TestAdapter": {
+              "target": "Package",
+              "version": "[4.4.2, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.413/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/josepuma/Documents/Github/storytor/storytor.Game/storytor.Game.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/josepuma/Documents/Github/storytor/storytor.Game/storytor.Game.csproj",
+        "projectName": "storytor.Game",
+        "projectPath": "/Users/josepuma/Documents/Github/storytor/storytor.Game/storytor.Game.csproj",
+        "packagesPath": "/Users/josepuma/.nuget/packages/",
+        "outputPath": "/Users/josepuma/Documents/Github/storytor/storytor.Game/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/josepuma/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {
+              "/Users/josepuma/Documents/Github/storytor/storytor.Resources/storytor.Resources.csproj": {
+                "projectPath": "/Users/josepuma/Documents/Github/storytor/storytor.Resources/storytor.Resources.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "dependencies": {
+            "ppy.osu.Framework": {
+              "target": "Package",
+              "version": "[2025.908.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.413/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "/Users/josepuma/Documents/Github/storytor/storytor.Resources/storytor.Resources.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/Users/josepuma/Documents/Github/storytor/storytor.Resources/storytor.Resources.csproj",
+        "projectName": "storytor.Resources",
+        "projectPath": "/Users/josepuma/Documents/Github/storytor/storytor.Resources/storytor.Resources.csproj",
+        "packagesPath": "/Users/josepuma/.nuget/packages/",
+        "outputPath": "/Users/josepuma/Documents/Github/storytor/storytor.Resources/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/Users/josepuma/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net8.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net8.0": {
+            "targetAlias": "net8.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.413/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

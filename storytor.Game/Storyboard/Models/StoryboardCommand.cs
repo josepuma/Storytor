@@ -1,0 +1,179 @@
+
+namespace storytor.Game.Storyboard.Models
+{
+    /// <summary>
+    /// Represents a command that can be applied to a storyboard sprite
+    /// </summary>
+    public abstract class StoryboardCommand
+    {
+        /// <summary>
+        /// The type of command (e.g., "F" for Fade)
+        /// </summary>
+        public string CommandType { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// Easing type for the command (0 = None, 1 = Out, 2 = In, 3 = InOut)
+        /// </summary>
+        public int Easing { get; set; }
+        
+        /// <summary>
+        /// Start time of the command in milliseconds
+        /// </summary>
+        public int StartTime { get; set; }
+        
+        /// <summary>
+        /// End time of the command in milliseconds
+        /// </summary>
+        public int EndTime { get; set; }
+    }
+    
+    /// <summary>
+    /// Represents a fade command that controls sprite opacity
+    /// </summary>
+    public class FadeCommand : StoryboardCommand
+    {
+        /// <summary>
+        /// Starting opacity value (0.0 to 1.0)
+        /// </summary>
+        public float StartOpacity { get; set; }
+        
+        /// <summary>
+        /// Ending opacity value (0.0 to 1.0)
+        /// </summary>
+        public float EndOpacity { get; set; }
+        
+        public FadeCommand()
+        {
+            CommandType = "F";
+        }
+        
+        public override string ToString()
+        {
+            return $"Fade: {StartOpacity} -> {EndOpacity} ({StartTime}ms - {EndTime}ms)";
+        }
+    }
+    
+    /// <summary>
+    /// Represents a move command that controls sprite position
+    /// </summary>
+    public class MoveCommand : StoryboardCommand
+    {
+        /// <summary>
+        /// Starting X position
+        /// </summary>
+        public float StartX { get; set; }
+        
+        /// <summary>
+        /// Starting Y position
+        /// </summary>
+        public float StartY { get; set; }
+        
+        /// <summary>
+        /// Ending X position
+        /// </summary>
+        public float EndX { get; set; }
+        
+        /// <summary>
+        /// Ending Y position
+        /// </summary>
+        public float EndY { get; set; }
+        
+        public MoveCommand()
+        {
+            CommandType = "M";
+        }
+        
+        public override string ToString()
+        {
+            return $"Move: ({StartX}, {StartY}) -> ({EndX}, {EndY}) ({StartTime}ms - {EndTime}ms)";
+        }
+    }
+    
+    /// <summary>
+    /// Represents a scale command that controls sprite size
+    /// </summary>
+    public class ScaleCommand : StoryboardCommand
+    {
+        /// <summary>
+        /// Starting scale factor
+        /// </summary>
+        public float StartScale { get; set; }
+        
+        /// <summary>
+        /// Ending scale factor
+        /// </summary>
+        public float EndScale { get; set; }
+        
+        public ScaleCommand()
+        {
+            CommandType = "S";
+        }
+        
+        public override string ToString()
+        {
+            return $"Scale: {StartScale} -> {EndScale} ({StartTime}ms - {EndTime}ms)";
+        }
+    }
+    
+    /// <summary>
+    /// Represents a vector scale command that controls sprite size independently on X and Y axes
+    /// </summary>
+    public class VectorScaleCommand : StoryboardCommand
+    {
+        /// <summary>
+        /// Starting X scale factor
+        /// </summary>
+        public float StartScaleX { get; set; }
+        
+        /// <summary>
+        /// Starting Y scale factor
+        /// </summary>
+        public float StartScaleY { get; set; }
+        
+        /// <summary>
+        /// Ending X scale factor
+        /// </summary>
+        public float EndScaleX { get; set; }
+        
+        /// <summary>
+        /// Ending Y scale factor
+        /// </summary>
+        public float EndScaleY { get; set; }
+        
+        public VectorScaleCommand()
+        {
+            CommandType = "V";
+        }
+        
+        public override string ToString()
+        {
+            return $"VectorScale: ({StartScaleX}, {StartScaleY}) -> ({EndScaleX}, {EndScaleY}) ({StartTime}ms - {EndTime}ms)";
+        }
+    }
+    
+    /// <summary>
+    /// Represents a rotate command that controls sprite rotation
+    /// </summary>
+    public class RotateCommand : StoryboardCommand
+    {
+        /// <summary>
+        /// Starting rotation angle in radians
+        /// </summary>
+        public float StartAngle { get; set; }
+        
+        /// <summary>
+        /// Ending rotation angle in radians
+        /// </summary>
+        public float EndAngle { get; set; }
+        
+        public RotateCommand()
+        {
+            CommandType = "R";
+        }
+        
+        public override string ToString()
+        {
+            return $"Rotate: {StartAngle}rad -> {EndAngle}rad ({StartTime}ms - {EndTime}ms)";
+        }
+    }
+}

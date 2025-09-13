@@ -1,0 +1,13 @@
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/bin/Debug/net8.0/storytor.Resources.deps.json
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/bin/Debug/net8.0/storytor.Resources.dll
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/bin/Debug/net8.0/storytor.Resources.pdb
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/bin/Debug/net8.0/storytor.Resources.xml
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/obj/Debug/net8.0/storytor.Resources.GeneratedMSBuildEditorConfig.editorconfig
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/obj/Debug/net8.0/storytor.Resources.AssemblyInfoInputs.cache
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/obj/Debug/net8.0/storytor.Resources.AssemblyInfo.cs
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/obj/Debug/net8.0/storytor.Resources.csproj.CoreCompileInputs.cache
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/obj/Debug/net8.0/storytor.Resources.dll
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/obj/Debug/net8.0/refint/storytor.Resources.dll
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/obj/Debug/net8.0/storytor.Resources.xml
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/obj/Debug/net8.0/storytor.Resources.pdb
+/Users/josepuma/Documents/Github/storytor/storytor.Resources/obj/Debug/net8.0/ref/storytor.Resources.dll
