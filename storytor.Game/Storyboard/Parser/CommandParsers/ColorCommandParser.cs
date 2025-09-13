@@ -48,14 +48,19 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                     return null; // Start time is required
                 }
                 
-                // Parse end time (use start time if not provided)
-                if (parts.Length > 3 && int.TryParse(parts[3], out int endTime))
+                // Parse end time (handle empty values for persistent commands)
+                if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) && int.TryParse(parts[3], out int endTime))
                 {
                     colorCommand.EndTime = endTime;
                 }
+                else if (parts.Length > 3 && string.IsNullOrWhiteSpace(parts[3]))
+                {
+                    // Empty end time means persistent command - let renderer handle duration
+                    colorCommand.EndTime = int.MaxValue;
+                }
                 else
                 {
-                    colorCommand.EndTime = startTime; // Instant command
+                    colorCommand.EndTime = startTime; // Instant command (fallback)
                 }
                 
                 // Parse start RGB (required)
@@ -112,6 +117,20 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                 else
                 {
                     colorCommand.EndBlue = colorCommand.StartBlue; // No color change
+                }
+                
+                // Fix persistent vs instantaneous logic
+                if (colorCommand.EndTime == int.MaxValue)
+                {
+                    // Empty endtime - check if color values are different
+                    if (colorCommand.StartRed != colorCommand.EndRed ||
+                        colorCommand.StartGreen != colorCommand.EndGreen ||
+                        colorCommand.StartBlue != colorCommand.EndBlue)
+                    {
+                        // Different colors = instantaneous color change, not persistent
+                        colorCommand.EndTime = colorCommand.StartTime;
+                    }
+                    // If colors are the same, keep EndTime = int.MaxValue (persistent)
                 }
                 
                 return colorCommand;

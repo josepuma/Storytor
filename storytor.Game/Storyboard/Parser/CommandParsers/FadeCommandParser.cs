@@ -48,14 +48,19 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                     return null; // Start time is required
                 }
                 
-                // Parse end time (use start time if not provided)
-                if (parts.Length > 3 && int.TryParse(parts[3], out int endTime))
+                // Parse end time (handle empty values for persistent commands)
+                if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) && int.TryParse(parts[3], out int endTime))
                 {
                     fadeCommand.EndTime = endTime;
                 }
+                else if (parts.Length > 3 && string.IsNullOrWhiteSpace(parts[3]))
+                {
+                    // Empty end time means persistent command - let renderer handle duration
+                    fadeCommand.EndTime = int.MaxValue;
+                }
                 else
                 {
-                    fadeCommand.EndTime = startTime; // Instant command
+                    fadeCommand.EndTime = startTime; // Instant command (fallback)
                 }
                 
                 // Parse start opacity (required)
@@ -76,6 +81,18 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                 else
                 {
                     fadeCommand.EndOpacity = fadeCommand.StartOpacity; // No change
+                }
+                
+                // Fix persistent vs instantaneous logic
+                if (fadeCommand.EndTime == int.MaxValue)
+                {
+                    // Empty endtime - check if values are different
+                    if (Math.Abs(fadeCommand.StartOpacity - fadeCommand.EndOpacity) > 0.001f)
+                    {
+                        // Different values = instantaneous change, not persistent
+                        fadeCommand.EndTime = fadeCommand.StartTime;
+                    }
+                    // If values are the same, keep EndTime = int.MaxValue (persistent)
                 }
                 
                 return fadeCommand;

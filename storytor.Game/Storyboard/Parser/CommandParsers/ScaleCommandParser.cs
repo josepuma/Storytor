@@ -48,14 +48,19 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                     return null; // Start time is required
                 }
                 
-                // Parse end time (use start time if not provided)
-                if (parts.Length > 3 && int.TryParse(parts[3], out int endTime))
+                // Parse end time (handle empty values for persistent commands)
+                if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) && int.TryParse(parts[3], out int endTime))
                 {
                     scaleCommand.EndTime = endTime;
                 }
+                else if (parts.Length > 3 && string.IsNullOrWhiteSpace(parts[3]))
+                {
+                    // Empty end time means persistent command - let renderer handle duration
+                    scaleCommand.EndTime = int.MaxValue;
+                }
                 else
                 {
-                    scaleCommand.EndTime = startTime; // Instant command
+                    scaleCommand.EndTime = startTime; // Instant command (fallback)
                 }
                 
                 // Parse start scale (required)
@@ -76,6 +81,18 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                 else
                 {
                     scaleCommand.EndScale = scaleCommand.StartScale; // No scaling change
+                }
+                
+                // Fix persistent vs instantaneous logic
+                if (scaleCommand.EndTime == int.MaxValue)
+                {
+                    // Empty endtime - check if scale values are different
+                    if (Math.Abs(scaleCommand.StartScale - scaleCommand.EndScale) > 0.001f)
+                    {
+                        // Different scales = instantaneous scale, not persistent
+                        scaleCommand.EndTime = scaleCommand.StartTime;
+                    }
+                    // If scales are the same, keep EndTime = int.MaxValue (persistent)
                 }
                 
                 return scaleCommand;

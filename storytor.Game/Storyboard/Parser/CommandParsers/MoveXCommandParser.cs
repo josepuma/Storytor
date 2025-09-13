@@ -48,14 +48,19 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                     return null; // Start time is required
                 }
                 
-                // Parse end time (use start time if not provided)
-                if (parts.Length > 3 && int.TryParse(parts[3], out int endTime))
+                // Parse end time (handle empty values for persistent commands)
+                if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) && int.TryParse(parts[3], out int endTime))
                 {
                     moveXCommand.EndTime = endTime;
                 }
+                else if (parts.Length > 3 && string.IsNullOrWhiteSpace(parts[3]))
+                {
+                    // Empty end time means persistent command - let renderer handle duration
+                    moveXCommand.EndTime = int.MaxValue;
+                }
                 else
                 {
-                    moveXCommand.EndTime = startTime; // Instant command
+                    moveXCommand.EndTime = startTime; // Instant command (fallback)
                 }
                 
                 // Parse start X (required)
@@ -76,6 +81,18 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                 else
                 {
                     moveXCommand.EndX = moveXCommand.StartX; // No X movement
+                }
+                
+                // Fix persistent vs instantaneous logic
+                if (moveXCommand.EndTime == int.MaxValue)
+                {
+                    // Empty endtime - check if X values are different
+                    if (Math.Abs(moveXCommand.StartX - moveXCommand.EndX) > 0.001f)
+                    {
+                        // Different X values = instantaneous move, not persistent
+                        moveXCommand.EndTime = moveXCommand.StartTime;
+                    }
+                    // If X values are the same, keep EndTime = int.MaxValue (persistent)
                 }
                 
                 return moveXCommand;

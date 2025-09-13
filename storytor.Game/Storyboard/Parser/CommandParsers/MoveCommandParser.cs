@@ -48,14 +48,19 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                     return null; // Start time is required
                 }
                 
-                // Parse end time (use start time if not provided)
-                if (parts.Length > 3 && int.TryParse(parts[3], out int endTime))
+                // Parse end time (handle empty values for persistent commands)
+                if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) && int.TryParse(parts[3], out int endTime))
                 {
                     moveCommand.EndTime = endTime;
                 }
+                else if (parts.Length > 3 && string.IsNullOrWhiteSpace(parts[3]))
+                {
+                    // Empty end time means persistent command - let renderer handle duration
+                    moveCommand.EndTime = int.MaxValue;
+                }
                 else
                 {
-                    moveCommand.EndTime = startTime; // Instant command
+                    moveCommand.EndTime = startTime; // Instant command (fallback)
                 }
                 
                 // Parse start X position (required)
@@ -96,6 +101,19 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                 else
                 {
                     moveCommand.EndY = moveCommand.StartY; // No movement on Y
+                }
+                
+                // Fix persistent vs instantaneous logic
+                if (moveCommand.EndTime == int.MaxValue)
+                {
+                    // Empty endtime - check if position values are different
+                    if (Math.Abs(moveCommand.StartX - moveCommand.EndX) > 0.001f || 
+                        Math.Abs(moveCommand.StartY - moveCommand.EndY) > 0.001f)
+                    {
+                        // Different positions = instantaneous move, not persistent
+                        moveCommand.EndTime = moveCommand.StartTime;
+                    }
+                    // If positions are the same, keep EndTime = int.MaxValue (persistent)
                 }
                 
                 return moveCommand;

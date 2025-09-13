@@ -48,14 +48,19 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                     return null; // Start time is required
                 }
                 
-                // Parse end time (use start time if not provided)
-                if (parts.Length > 3 && int.TryParse(parts[3], out int endTime))
+                // Parse end time (handle empty values for persistent commands)
+                if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) && int.TryParse(parts[3], out int endTime))
                 {
                     rotateCommand.EndTime = endTime;
                 }
+                else if (parts.Length > 3 && string.IsNullOrWhiteSpace(parts[3]))
+                {
+                    // Empty end time means persistent command - let renderer handle duration
+                    rotateCommand.EndTime = int.MaxValue;
+                }
                 else
                 {
-                    rotateCommand.EndTime = startTime; // Instant command
+                    rotateCommand.EndTime = startTime; // Instant command (fallback)
                 }
                 
                 // Parse start angle (required)
@@ -76,6 +81,18 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                 else
                 {
                     rotateCommand.EndAngle = rotateCommand.StartAngle; // No rotation change
+                }
+                
+                // Fix persistent vs instantaneous logic
+                if (rotateCommand.EndTime == int.MaxValue)
+                {
+                    // Empty endtime - check if angle values are different
+                    if (Math.Abs(rotateCommand.StartAngle - rotateCommand.EndAngle) > 0.001f)
+                    {
+                        // Different angles = instantaneous rotation, not persistent
+                        rotateCommand.EndTime = rotateCommand.StartTime;
+                    }
+                    // If angles are the same, keep EndTime = int.MaxValue (persistent)
                 }
                 
                 return rotateCommand;

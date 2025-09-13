@@ -48,14 +48,19 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                     return null; // Start time is required
                 }
                 
-                // Parse end time (use start time if not provided)
-                if (parts.Length > 3 && int.TryParse(parts[3], out int endTime))
+                // Parse end time (handle empty values for persistent commands)
+                if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) && int.TryParse(parts[3], out int endTime))
                 {
                     vectorScaleCommand.EndTime = endTime;
                 }
+                else if (parts.Length > 3 && string.IsNullOrWhiteSpace(parts[3]))
+                {
+                    // Empty end time means persistent command - let renderer handle duration
+                    vectorScaleCommand.EndTime = int.MaxValue;
+                }
                 else
                 {
-                    vectorScaleCommand.EndTime = startTime; // Instant command
+                    vectorScaleCommand.EndTime = startTime; // Instant command (fallback)
                 }
                 
                 // Parse start scale X (required)
@@ -96,6 +101,19 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                 else
                 {
                     vectorScaleCommand.EndScaleY = vectorScaleCommand.StartScaleY; // No Y scaling change
+                }
+                
+                // Fix persistent vs instantaneous logic
+                if (vectorScaleCommand.EndTime == int.MaxValue)
+                {
+                    // Empty endtime - check if scale values are different
+                    if (Math.Abs(vectorScaleCommand.StartScaleX - vectorScaleCommand.EndScaleX) > 0.001f ||
+                        Math.Abs(vectorScaleCommand.StartScaleY - vectorScaleCommand.EndScaleY) > 0.001f)
+                    {
+                        // Different scales = instantaneous scale change, not persistent
+                        vectorScaleCommand.EndTime = vectorScaleCommand.StartTime;
+                    }
+                    // If scales are the same, keep EndTime = int.MaxValue (persistent)
                 }
                 
                 return vectorScaleCommand;
