@@ -214,10 +214,12 @@ namespace storytor.Game.Storyboard.Parser
                     ImagePath = removeQuotes(values[3].Trim()),
                     X = float.Parse(values[4], CultureInfo.InvariantCulture),
                     Y = float.Parse(values[5], CultureInfo.InvariantCulture),
-                    // Animation-specific properties could be added to StoryboardSprite if needed
-                    // FrameCount = int.Parse(values[6]),
-                    // FrameDelay = double.Parse(values[7], CultureInfo.InvariantCulture),
-                    // LoopType = values[8]
+
+                    // Animation-specific properties
+                    IsAnimation = true,
+                    FrameCount = int.Parse(values[6], CultureInfo.InvariantCulture),
+                    FrameDelay = double.Parse(values[7], CultureInfo.InvariantCulture),
+                    LoopType = values[8].Trim()
                 };
             }
             catch (Exception)

@@ -12,7 +12,15 @@ namespace storytor.Game.Storyboard.Rendering
     {
         private readonly List<StoryboardCommand> commands = new List<StoryboardCommand>();
         private readonly string commandType;
-        
+
+        // Internal access for optimization
+        internal IReadOnlyList<StoryboardCommand> Commands => commands;
+
+        // Cache for performance optimization
+        private double lastQueryTime = double.MinValue;
+        private StoryboardCommand lastActiveCommand = null;
+        private int lastSearchIndex = 0;
+
         public bool HasCommands => commands.Count > 0;
         
         public CommandTimeline(string commandType)
@@ -23,37 +31,107 @@ namespace storytor.Game.Storyboard.Rendering
         public void AddCommand(StoryboardCommand command)
         {
             if (command.CommandType != commandType) return;
-            
+
             commands.Add(command);
             commands.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
+
+            // Invalidate cache when commands change
+            InvalidateCache();
         }
         
         public void Clear()
         {
             commands.Clear();
+            InvalidateCache();
+        }
+
+        private void InvalidateCache()
+        {
+            lastQueryTime = double.MinValue;
+            lastActiveCommand = null;
+            lastSearchIndex = 0;
         }
         
         /// <summary>
-        /// Gets the active command at a specific time
+        /// Gets the active command at a specific time (optimized with caching)
         /// </summary>
         public StoryboardCommand GetActiveCommand(double time)
         {
             if (!HasCommands) return null;
-            
-            StoryboardCommand activeCommand = null;
-            
-            foreach (var command in commands)
+
+            // Use cache if querying the same time or very close time
+            if (Math.Abs(time - lastQueryTime) < 1.0) // Within 1ms tolerance
             {
-                // Command hasn't started yet
-                if (time < command.StartTime) break;
-                
-                // Command is active
-                if (time >= command.StartTime && time <= command.EndTime)
+                if (lastActiveCommand != null &&
+                    time >= lastActiveCommand.StartTime &&
+                    time <= lastActiveCommand.EndTime)
                 {
-                    activeCommand = command;
+                    return lastActiveCommand;
                 }
             }
-            
+
+            // Cache miss - do optimized search
+            StoryboardCommand activeCommand = null;
+            int startIndex = 0;
+
+            // If time is close to last query, start search from last position
+            if (time >= lastQueryTime && lastSearchIndex < commands.Count)
+            {
+                startIndex = Math.Max(0, lastSearchIndex - 1);
+            }
+
+            // Binary search for better performance with many commands
+            if (commands.Count > 20) // Use binary search for large command lists
+            {
+                int left = startIndex;
+                int right = commands.Count - 1;
+                int bestIndex = -1;
+
+                while (left <= right)
+                {
+                    int mid = (left + right) / 2;
+                    if (commands[mid].StartTime <= time)
+                    {
+                        bestIndex = mid;
+                        left = mid + 1;
+                    }
+                    else
+                    {
+                        right = mid - 1;
+                    }
+                }
+
+                // Check commands around the found index
+                for (int i = Math.Max(0, bestIndex - 2); i <= Math.Min(commands.Count - 1, bestIndex + 2); i++)
+                {
+                    var command = commands[i];
+                    if (time >= command.StartTime && time <= command.EndTime)
+                    {
+                        activeCommand = command;
+                        lastSearchIndex = i;
+                    }
+                }
+            }
+            else
+            {
+                // Linear search for small command lists
+                for (int i = startIndex; i < commands.Count; i++)
+                {
+                    var command = commands[i];
+                    if (time < command.StartTime) break;
+
+                    if (time >= command.StartTime && time <= command.EndTime)
+                    {
+                        activeCommand = command;
+                        lastSearchIndex = i;
+                    }
+                }
+            }
+
+            // Update cache
+            lastQueryTime = time;
+            lastActiveCommand = activeCommand;
+
             return activeCommand;
         }
         
