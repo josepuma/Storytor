@@ -5,6 +5,7 @@ using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Primitives;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.Textures;
 using osu.Framework.Platform;
@@ -293,6 +294,70 @@ namespace storytor.Game.Screens
                         }
                         break;
 
+
+                    case nameof(MoveXCommand):
+                        var moveXCmd = getActiveCommand(commandsOfType.Cast<MoveXCommand>(), timeMs);
+                        if (moveXCmd != null)
+                        {
+                            var xOffset = (854f - 640f) / 2f;
+                            var currentX = interpolateDoubleValue(timeMs, moveXCmd.StartTime, moveXCmd.EndTime, moveXCmd.StartX + xOffset, moveXCmd.EndX + xOffset, moveXCmd.Easing);
+                            drawable.Position = new osuTK.Vector2((float)currentX, drawable.Position.Y);
+                        }
+                        break;
+
+                    case nameof(MoveYCommand):
+                        var moveYCmd = getActiveCommand(commandsOfType.Cast<MoveYCommand>(), timeMs);
+                        if (moveYCmd != null)
+                        {
+                            var currentY = interpolateDoubleValue(timeMs, moveYCmd.StartTime, moveYCmd.EndTime, moveYCmd.StartY, moveYCmd.EndY, moveYCmd.Easing);
+                            drawable.Position = new osuTK.Vector2(drawable.Position.X, (float)currentY);
+                        }
+                        break;
+
+                    case nameof(ColorCommand):
+                        var colorCmd = getActiveCommand(commandsOfType.Cast<ColorCommand>(), timeMs);
+                        if (colorCmd != null)
+                        {
+                            var currentRed = interpolateDoubleValue(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartRed, colorCmd.EndRed, colorCmd.Easing);
+                            var currentGreen = interpolateDoubleValue(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartGreen, colorCmd.EndGreen, colorCmd.Easing);
+                            var currentBlue = interpolateDoubleValue(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartBlue, colorCmd.EndBlue, colorCmd.Easing);
+
+                            var red = Math.Clamp((float)(currentRed / 255.0), 0f, 1f);
+                            var green = Math.Clamp((float)(currentGreen / 255.0), 0f, 1f);
+                            var blue = Math.Clamp((float)(currentBlue / 255.0), 0f, 1f);
+
+                            // Preserve the current alpha from fade commands
+                            var currentAlpha = drawable.Alpha;
+                            drawable.Colour = new Colour4(red, green, blue, 1.0f);
+                        }
+                        break;
+
+                    case nameof(ParameterCommand):
+                        // Apply active parameter commands (parameters only apply while active)
+                        var activeParameterCmds = commandsOfType.Cast<ParameterCommand>()
+                            .Where(cmd => timeMs >= cmd.StartTime && timeMs <= cmd.EndTime)
+                            .ToList();
+
+                        foreach (var paramCmd in activeParameterCmds)
+                        {
+                            switch (paramCmd.Parameter)
+                            {
+                                case "H":
+                                    // Flip horizontally by negating X scale
+                                    drawable.Scale = new osuTK.Vector2(-Math.Abs(drawable.Scale.X), drawable.Scale.Y);
+                                    break;
+                                case "V":
+                                    // Flip vertically by negating Y scale
+                                    drawable.Scale = new osuTK.Vector2(drawable.Scale.X, -Math.Abs(drawable.Scale.Y));
+                                    break;
+                                case "A":
+                                    // Enable additive blending
+                                    drawable.Blending = BlendingParameters.Additive;
+                                    break;
+                            }
+                        }
+                        break;
+
                     default:
                         Console.WriteLine($"Unknown command type: {commandGroup.Key.Name}");
                         break;
@@ -330,19 +395,36 @@ namespace storytor.Game.Screens
             // Find first command of each type to get initial values
             var firstFade = storyboardSprite.Commands.OfType<FadeCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
             var firstMove = storyboardSprite.Commands.OfType<MoveCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
+            var firstMoveX = storyboardSprite.Commands.OfType<MoveXCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
+            var firstMoveY = storyboardSprite.Commands.OfType<MoveYCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
             var firstScale = storyboardSprite.Commands.OfType<ScaleCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
             var firstVectorScale = storyboardSprite.Commands.OfType<VectorScaleCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
             var firstRotate = storyboardSprite.Commands.OfType<RotateCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
+            var firstColor = storyboardSprite.Commands.OfType<ColorCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
 
-            // Set position (use first move command start position if available)
-            if (firstMove != null)
+            // Set position (prioritize specific move commands over general move command)
+            var initialX = storyboardSprite.X + xOffset;
+            var initialY = storyboardSprite.Y;
+
+            if (firstMoveX != null)
             {
-                drawable.Position = new osuTK.Vector2(firstMove.StartX + xOffset, firstMove.StartY);
+                initialX = firstMoveX.StartX + xOffset;
             }
-            else
+            else if (firstMove != null)
             {
-                drawable.Position = new osuTK.Vector2(storyboardSprite.X + xOffset, storyboardSprite.Y);
+                initialX = firstMove.StartX + xOffset;
             }
+
+            if (firstMoveY != null)
+            {
+                initialY = firstMoveY.StartY;
+            }
+            else if (firstMove != null)
+            {
+                initialY = firstMove.StartY;
+            }
+
+            drawable.Position = new osuTK.Vector2(initialX, initialY);
 
             // Set alpha (use first fade command start value if available)
             if (firstFade != null)
@@ -378,6 +460,22 @@ namespace storytor.Game.Screens
             {
                 drawable.Rotation = 0.0f; // Default rotation
             }
+
+            // Set color (use first color command start value if available)
+            if (firstColor != null)
+            {
+                var red = Math.Clamp(firstColor.StartRed / 255.0f, 0f, 1f);
+                var green = Math.Clamp(firstColor.StartGreen / 255.0f, 0f, 1f);
+                var blue = Math.Clamp(firstColor.StartBlue / 255.0f, 0f, 1f);
+                drawable.Colour = new Colour4(red, green, blue, 1.0f);
+            }
+            else
+            {
+                drawable.Colour = Colour4.White; // Default white (no tinting)
+            }
+
+            // Reset blending to default (will be overridden by Parameter commands if active)
+            drawable.Blending = BlendingParameters.Mixture;
         }
 
 

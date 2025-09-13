@@ -11,9 +11,11 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
+using osu.Framework.Input.Events;
 using osu.Framework.IO.Stores;
 using osu.Framework.Platform;
 using osu.Framework.Screens;
+using osuTK.Input;
 using storytor.Game.Storyboard;
 using storytor.Game.Storyboard.Models;
 
@@ -55,13 +57,32 @@ namespace storytor.Game.Screens
                     RelativeSizeAxes = Axes.Both,
                     Children = new Drawable[]
                     {
-                        new SpriteText
+                        new FillFlowContainer
                         {
-                            Text = "Select a beatmap folder to load storyboard",
+                            AutoSizeAxes = Axes.Both,
                             Anchor = Anchor.Centre,
                             Origin = Anchor.Centre,
-                            Font = FontUsage.Default.With(size: 18),
-                            Colour = Colour4.White.Opacity(0.7f)
+                            Direction = FillDirection.Vertical,
+                            Spacing = new osuTK.Vector2(0, 10),
+                            Children = new Drawable[]
+                            {
+                                new SpriteText
+                                {
+                                    Text = "Select a beatmap folder to load storyboard",
+                                    Anchor = Anchor.TopCentre,
+                                    Origin = Anchor.TopCentre,
+                                    Font = FontUsage.Default.With(size: 18),
+                                    Colour = Colour4.White.Opacity(0.7f)
+                                },
+                                new SpriteText
+                                {
+                                    Text = "Controls: SPACE = Play/Pause | ← → = Seek ±5s | ↑ ↓ = Seek ±10s",
+                                    Anchor = Anchor.TopCentre,
+                                    Origin = Anchor.TopCentre,
+                                    Font = FontUsage.Default.With(size: 14),
+                                    Colour = Colour4.White.Opacity(0.5f)
+                                }
+                            }
                         }
                     }
                 },
@@ -150,6 +171,10 @@ namespace storytor.Game.Screens
                 
                 if (!string.IsNullOrEmpty(folderPath))
                 {
+                    // Clean up previous state
+                    cleanupCurrentContent();
+                    
+                    // Load new beatmap folder
                     await loadBeatmapFolderAsync(folderPath);
                 }
                 else
@@ -165,6 +190,42 @@ namespace storytor.Game.Screens
             {
                 loadButton.Enabled.Value = true;
             }
+        }
+
+        private void cleanupCurrentContent()
+        {
+            // Stop and dispose current track
+            if (currentTrack != null)
+            {
+                currentTrack.Stop();
+                currentTrack.Dispose();
+                currentTrack = null;
+            }
+
+            // Clear current storyboard
+            currentStoryboard = null;
+            
+            // Clear storyboard renderer
+            if (storyboardRenderer != null)
+            {
+                storyboardContainer.Remove(storyboardRenderer, true);
+                storyboardRenderer = null;
+            }
+
+            // Reset UI state
+            playPauseButton.Alpha = 0.5f; // Disable play button
+            timeDisplay.Text = "00:00 / 00:00";
+            
+            // Reset storyboard container to initial state
+            storyboardContainer.Clear();
+            storyboardContainer.Add(new SpriteText
+            {
+                Text = "Loading new storyboard...",
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre,
+                Font = FontUsage.Default.With(size: 18),
+                Colour = Colour4.White.Opacity(0.7f)
+            });
         }
         
         private async Task<string> showFolderPickerAsync()
@@ -470,6 +531,62 @@ namespace storytor.Game.Screens
             {
                 currentTrack.Start();
             }
+        }
+
+        protected override bool OnKeyDown(KeyDownEvent e)
+        {
+            switch (e.Key)
+            {
+                case Key.Space:
+                    if (currentTrack != null)
+                    {
+                        togglePlayback();
+                        return true;
+                    }
+                    break;
+
+                case Key.Left:
+                    if (currentTrack != null)
+                    {
+                        seekTrack(-5000); // Retroceder 5 segundos
+                        return true;
+                    }
+                    break;
+
+                case Key.Right:
+                    if (currentTrack != null)
+                    {
+                        seekTrack(5000); // Avanzar 5 segundos
+                        return true;
+                    }
+                    break;
+
+                case Key.Down:
+                    if (currentTrack != null)
+                    {
+                        seekTrack(-10000); // Retroceder 10 segundos
+                        return true;
+                    }
+                    break;
+
+                case Key.Up:
+                    if (currentTrack != null)
+                    {
+                        seekTrack(10000); // Avanzar 10 segundos
+                        return true;
+                    }
+                    break;
+            }
+
+            return base.OnKeyDown(e);
+        }
+
+        private void seekTrack(double deltaMs)
+        {
+            if (currentTrack == null) return;
+
+            var newTime = Math.Max(0, Math.Min(currentTrack.Length, currentTrack.CurrentTime + deltaMs));
+            currentTrack.Seek(newTime);
         }
         
         protected override void Dispose(bool isDisposing)

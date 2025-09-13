@@ -176,4 +176,124 @@ namespace storytor.Game.Storyboard.Models
             return $"Rotate: {StartAngle}rad -> {EndAngle}rad ({StartTime}ms - {EndTime}ms)";
         }
     }
+
+    /// <summary>
+    /// Represents a parameter command that applies special effects (H, V, A)
+    /// Unlike other commands, parameters only apply while they are active
+    /// </summary>
+    public class ParameterCommand : StoryboardCommand
+    {
+        /// <summary>
+        /// Parameter type: "H" (horizontal flip), "V" (vertical flip), "A" (additive blending)
+        /// </summary>
+        public string Parameter { get; set; } = string.Empty;
+
+        public ParameterCommand()
+        {
+            CommandType = "P";
+        }
+
+        public override string ToString()
+        {
+            return $"Parameter: {Parameter} ({StartTime}ms - {EndTime}ms)";
+        }
+    }
+
+    /// <summary>
+    /// Represents a move X command that controls sprite X position only
+    /// </summary>
+    public class MoveXCommand : StoryboardCommand
+    {
+        /// <summary>
+        /// Starting X position
+        /// </summary>
+        public float StartX { get; set; }
+
+        /// <summary>
+        /// Ending X position
+        /// </summary>
+        public float EndX { get; set; }
+
+        public MoveXCommand()
+        {
+            CommandType = "MX";
+        }
+
+        public override string ToString()
+        {
+            return $"MoveX: {StartX} -> {EndX} ({StartTime}ms - {EndTime}ms)";
+        }
+    }
+
+    /// <summary>
+    /// Represents a move Y command that controls sprite Y position only
+    /// </summary>
+    public class MoveYCommand : StoryboardCommand
+    {
+        /// <summary>
+        /// Starting Y position
+        /// </summary>
+        public float StartY { get; set; }
+
+        /// <summary>
+        /// Ending Y position
+        /// </summary>
+        public float EndY { get; set; }
+
+        public MoveYCommand()
+        {
+            CommandType = "MY";
+        }
+
+        public override string ToString()
+        {
+            return $"MoveY: {StartY} -> {EndY} ({StartTime}ms - {EndTime}ms)";
+        }
+    }
+
+    /// <summary>
+    /// Represents a color command that controls sprite tinting
+    /// </summary>
+    public class ColorCommand : StoryboardCommand
+    {
+        /// <summary>
+        /// Starting red component (0-255)
+        /// </summary>
+        public byte StartRed { get; set; }
+
+        /// <summary>
+        /// Starting green component (0-255)
+        /// </summary>
+        public byte StartGreen { get; set; }
+
+        /// <summary>
+        /// Starting blue component (0-255)
+        /// </summary>
+        public byte StartBlue { get; set; }
+
+        /// <summary>
+        /// Ending red component (0-255)
+        /// </summary>
+        public byte EndRed { get; set; }
+
+        /// <summary>
+        /// Ending green component (0-255)
+        /// </summary>
+        public byte EndGreen { get; set; }
+
+        /// <summary>
+        /// Ending blue component (0-255)
+        /// </summary>
+        public byte EndBlue { get; set; }
+
+        public ColorCommand()
+        {
+            CommandType = "C";
+        }
+
+        public override string ToString()
+        {
+            return $"Color: ({StartRed},{StartGreen},{StartBlue}) -> ({EndRed},{EndGreen},{EndBlue}) ({StartTime}ms - {EndTime}ms)";
+        }
+    }
 }

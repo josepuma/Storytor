@@ -191,6 +191,26 @@ namespace storytor.Game.Storyboard.Parser
                 return RotateCommandParser.ParseRotateCommand(trimmedLine);
             }
             
+            if (ParameterCommandParser.IsParameterCommand(trimmedLine))
+            {
+                return ParameterCommandParser.ParseParameterCommand(trimmedLine);
+            }
+            
+            if (MoveXCommandParser.IsMoveXCommand(trimmedLine))
+            {
+                return MoveXCommandParser.ParseMoveXCommand(trimmedLine);
+            }
+            
+            if (MoveYCommandParser.IsMoveYCommand(trimmedLine))
+            {
+                return MoveYCommandParser.ParseMoveYCommand(trimmedLine);
+            }
+            
+            if (ColorCommandParser.IsColorCommand(trimmedLine))
+            {
+                return ColorCommandParser.ParseColorCommand(trimmedLine);
+            }
+            
             // Unknown command type
             return null;
         }
