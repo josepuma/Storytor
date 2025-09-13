@@ -27,6 +27,8 @@ namespace storytor.Game.Screens
         private readonly Dictionary<StoryboardSprite, AnimatedStoryboardSprite> spriteDrawables = new Dictionary<StoryboardSprite, AnimatedStoryboardSprite>();
         private readonly Dictionary<StoryboardSprite, List<StoryboardCommand>> expandedCommandsCache = new Dictionary<StoryboardSprite, List<StoryboardCommand>>();
         private readonly Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>> commandsByTypeCache = new Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>>();
+        private readonly Dictionary<string, Texture> textureCache = new Dictionary<string, Texture>();
+        private const int MAX_TEXTURE_CACHE_SIZE = 100; // Limit cache size to prevent memory issues
         private Container storyboardContainer;
 
         public StoryboardRenderer(StoryboardData storyboard, string basePath)
@@ -109,12 +111,8 @@ namespace storytor.Game.Screens
 
             try
             {
-                // Load texture directly from file using framework texture creation
-                Texture texture = null;
-
-                // Load texture using osu!framework's Texture.FromStream
-                using var stream = File.OpenRead(foundPath);
-                texture = Texture.FromStream(host.Renderer, stream);
+                // Use texture cache to avoid loading the same texture multiple times
+                Texture texture = getOrLoadTexture(foundPath);
 
                 // Create animated sprite with adjusted coordinates for 16:9 container
                 // osu! coordinates are based on 640x480, but we use 854x480
@@ -141,6 +139,60 @@ namespace storytor.Game.Screens
         }
 
         /// <summary>
+        /// Gets a texture from cache or loads it from disk if not cached
+        /// </summary>
+        /// <param name="imagePath">Path to the image file</param>
+        /// <returns>The loaded texture</returns>
+        private Texture getOrLoadTexture(string imagePath)
+        {
+            // Use the full path as cache key
+            if (textureCache.TryGetValue(imagePath, out var cachedTexture))
+            {
+                return cachedTexture;
+            }
+
+            // Load texture from file
+            Texture texture;
+            using var stream = File.OpenRead(imagePath);
+            texture = Texture.FromStream(host.Renderer, stream);
+
+            // Check if cache is getting too large and clean if necessary
+            if (textureCache.Count >= MAX_TEXTURE_CACHE_SIZE)
+            {
+                cleanTextureCache();
+            }
+
+            // Cache the texture for reuse
+            textureCache[imagePath] = texture;
+
+            // Log cache size for monitoring (can be removed in production)
+            if (textureCache.Count % 10 == 0)
+            {
+                Console.WriteLine($"🎨 Texture cache size: {textureCache.Count} textures");
+            }
+
+            return texture;
+        }
+
+        /// <summary>
+        /// Cleans the texture cache by removing half of the cached textures
+        /// This helps prevent memory issues when the cache grows too large
+        /// </summary>
+        private void cleanTextureCache()
+        {
+            var texturesToRemove = textureCache.Take(textureCache.Count / 2).ToList();
+
+            foreach (var kvp in texturesToRemove)
+            {
+                // Dispose the texture to free GPU memory
+                kvp.Value?.Dispose();
+                textureCache.Remove(kvp.Key);
+            }
+
+            Console.WriteLine($"🧹 Cleaned texture cache. Removed {texturesToRemove.Count} textures. Cache size now: {textureCache.Count}");
+        }
+
+        /// <summary>
         /// Updates the renderer with the current audio time
         /// </summary>
         /// <param name="timeMs">Current time in milliseconds</param>
@@ -154,7 +206,7 @@ namespace storytor.Game.Screens
             }
         }
 
-        private static void updateSpriteAtTime(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite, double timeMs, 
+        private static void updateSpriteAtTime(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite, double timeMs,
             Dictionary<StoryboardSprite, List<StoryboardCommand>> expandedCommandsCache,
             Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>> commandsByTypeCache)
         {
@@ -292,29 +344,34 @@ namespace storytor.Game.Screens
                         break;
 
                     case nameof(ParameterCommand):
-                        // Apply active parameter commands (parameters only apply while active)
-                        var (spriteStart, spriteEnd) = SpriteLifetimeManager.GetSpriteLifetime(storyboardSprite);
-                        var activeParameterCmds = CommandProcessor.GetActiveParameterCommands(commandsOfType.Cast<ParameterCommand>(), timeMs, spriteStart, spriteEnd);
+                        // Obtener parámetros activos
+                        var parameterCmds = CommandProcessor.GetActiveParameterCommands(
+                            commandsOfType.Cast<ParameterCommand>(),
+                            timeMs
+                        );
 
-                        foreach (var paramCmd in activeParameterCmds)
+                        foreach (var paramCmd in parameterCmds)
                         {
                             switch (paramCmd.Parameter)
                             {
                                 case "H":
-                                    // Flip horizontally by negating X scale
+                                    // Flip horizontal (negamos X)
                                     drawable.Scale = new osuTK.Vector2(-Math.Abs(drawable.Scale.X), drawable.Scale.Y);
                                     break;
+
                                 case "V":
-                                    // Flip vertically by negating Y scale
+                                    // Flip vertical (negamos Y)
                                     drawable.Scale = new osuTK.Vector2(drawable.Scale.X, -Math.Abs(drawable.Scale.Y));
                                     break;
+
                                 case "A":
-                                    // Enable additive blending
+                                    // Additive blending
                                     drawable.Blending = BlendingParameters.Additive;
                                     break;
                             }
                         }
                         break;
+
 
                     default:
                         break;
@@ -459,6 +516,25 @@ namespace storytor.Game.Screens
             }
 
             storyboardContainer.Scale = new osuTK.Vector2(scale);
+        }
+
+        /// <summary>
+        /// Dispose resources including texture cache
+        /// </summary>
+        protected override void Dispose(bool isDisposing)
+        {
+            if (isDisposing)
+            {
+                // Dispose all cached textures
+                foreach (var texture in textureCache.Values)
+                {
+                    texture?.Dispose();
+                }
+                textureCache.Clear();
+                Console.WriteLine("🗑️ Disposed texture cache with all textures");
+            }
+
+            base.Dispose(isDisposing);
         }
     }
 

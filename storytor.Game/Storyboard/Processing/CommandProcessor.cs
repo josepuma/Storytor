@@ -16,90 +16,65 @@ namespace storytor.Game.Storyboard.Processing
         /// <param name="commands">List of commands to search</param>
         /// <param name="timeMs">Current time in milliseconds</param>
         /// <returns>The most relevant command for the current time, or null if none</returns>
-        public static T GetActiveCommand<T>(IEnumerable<T> commands, double timeMs) where T : StoryboardCommand
+        public static T GetActiveCommand<T>(IEnumerable<T> commands, double timeMs)
+        where T : StoryboardCommand
         {
-            var commandList = commands as List<T> ?? commands.ToList();
-            if (commandList.Count == 0) return null;
+            if (commands == null) return null;
 
-            // Sort commands by start time to process in chronological order
-            var sortedCommands = commandList.OrderBy(c => c.StartTime).ToList();
+            var list = commands as IList<T> ?? [.. commands];
+            if (list.Count == 0) return null;
 
-            T bestCommand = null;
+            int left = 0;
+            int right = list.Count - 1;
+            int bestIndex = -1;
 
-            // Find the most relevant command for the current time
-            // Priority: Active commands > Most recent started command
-            foreach (var cmd in sortedCommands)
+            while (left <= right)
             {
-                if (cmd.StartTime > timeMs)
+                int mid = (left + right) / 2;
+                if (list[mid].StartTime <= timeMs)
                 {
-                    // Command hasn't started yet, skip
-                    continue;
-                }
-
-                if (cmd.EndTime == int.MaxValue)
-                {
-                    // Persistent command: active from StartTime until overridden by a later command
-                    bestCommand = cmd;
-
-                    // Check if there's a later command that overrides this persistent one
-                    var overridingCmd = sortedCommands
-                        .Where(c => c.StartTime > cmd.StartTime && c.StartTime <= timeMs)
-                        .OrderByDescending(c => c.StartTime)
-                        .FirstOrDefault();
-
-                    if (overridingCmd != null)
-                    {
-                        bestCommand = overridingCmd;
-                    }
+                    bestIndex = mid;
+                    left = mid + 1;
                 }
                 else
                 {
-                    // Normal command: Use it regardless of whether it's still active
-                    // This ensures that completed commands maintain their final values
-                    bestCommand = cmd;
+                    right = mid - 1;
                 }
             }
 
-            return bestCommand;
+            if (bestIndex == -1)
+                return null;
+
+            return list[bestIndex];
         }
+
 
         /// <summary>
         /// Gets active parameter commands, handling persistent parameters correctly
         /// Single persistent parameters apply for the entire sprite lifetime, ignoring their StartTime
         /// </summary>
-        public static List<ParameterCommand> GetActiveParameterCommands(IEnumerable<ParameterCommand> commands, double timeMs, double spriteStartTime, double spriteEndTime)
+        public static List<ParameterCommand> GetActiveParameterCommands(
+            IEnumerable<ParameterCommand> commands,
+            double timeMs)
         {
-            var commandList = commands as List<ParameterCommand> ?? commands.ToList();
-            if (commandList.Count == 0) return new List<ParameterCommand>();
+            var result = new List<ParameterCommand>();
 
-            var activeCommands = new List<ParameterCommand>();
-
-            // Group commands by parameter type
-            var commandsByType = commandList.GroupBy(c => c.Parameter);
-
-            foreach (var group in commandsByType)
+            foreach (var cmd in commands)
             {
-                var typeCommands = group.OrderBy(c => c.StartTime).ToList();
-
-                if (typeCommands.Count == 1 && typeCommands[0].EndTime == int.MaxValue)
+                if (cmd.StartTime == cmd.EndTime)
                 {
-                    // Single persistent parameter: applies for entire sprite lifetime
-                    if (timeMs >= spriteStartTime && timeMs <= spriteEndTime)
-                    {
-                        activeCommands.Add(typeCommands[0]);
-                    }
+                    // Parámetro constante, siempre aplica
+                    result.Add(cmd);
                 }
-                else
+                else if (timeMs >= cmd.StartTime && timeMs <= cmd.EndTime)
                 {
-                    // Multiple parameters or non-persistent: use normal logic
-                    if (GetActiveCommand(typeCommands.Cast<StoryboardCommand>(), timeMs) is ParameterCommand activeParam)
-                    {
-                        activeCommands.Add(activeParam);
-                    }
+                    // Activo solo dentro del rango
+                    result.Add(cmd);
                 }
             }
 
-            return activeCommands;
+            return result;
         }
+
     }
 }
