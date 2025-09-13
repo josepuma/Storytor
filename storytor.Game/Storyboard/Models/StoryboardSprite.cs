@@ -42,27 +42,6 @@ namespace storytor.Game.Storyboard.Models
         /// List of commands applied to this sprite
         /// </summary>
         public List<StoryboardCommand> Commands { get; set; } = new List<StoryboardCommand>();
-
-        // Animation properties
-        /// <summary>
-        /// True if this is an Animation, false if it's a regular Sprite
-        /// </summary>
-        public bool IsAnimation { get; set; } = false;
-
-        /// <summary>
-        /// Number of frames in the animation (for Animation only)
-        /// </summary>
-        public int FrameCount { get; set; } = 1;
-
-        /// <summary>
-        /// Delay between frames in milliseconds (for Animation only)
-        /// </summary>
-        public double FrameDelay { get; set; } = 100;
-
-        /// <summary>
-        /// Loop type for animation (LoopForever, LoopOnce)
-        /// </summary>
-        public string LoopType { get; set; } = "LoopForever";
         
         /// <summary>
         /// Gets the display name of the sprite (filename without path)
