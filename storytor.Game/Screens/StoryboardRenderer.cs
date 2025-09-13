@@ -24,6 +24,8 @@ namespace storytor.Game.Screens
         private readonly StoryboardData storyboard;
         private readonly string basePath;
         private readonly Dictionary<StoryboardSprite, AnimatedStoryboardSprite> spriteDrawables = new Dictionary<StoryboardSprite, AnimatedStoryboardSprite>();
+        private readonly Dictionary<StoryboardSprite, List<StoryboardCommand>> expandedCommandsCache = new Dictionary<StoryboardSprite, List<StoryboardCommand>>();
+        private readonly Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>> commandsByTypeCache = new Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>>();
         private int updateCounter = 0;
         private Container storyboardContainer;
 
@@ -205,11 +207,13 @@ namespace storytor.Game.Screens
 
             foreach (var (storyboardSprite, drawable) in spriteDrawables)
             {
-                updateSpriteAtTime(drawable, storyboardSprite, timeMs);
+                updateSpriteAtTime(drawable, storyboardSprite, timeMs, expandedCommandsCache, commandsByTypeCache);
             }
         }
 
-        private static void updateSpriteAtTime(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite, double timeMs)
+        private static void updateSpriteAtTime(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite, double timeMs, 
+            Dictionary<StoryboardSprite, List<StoryboardCommand>> expandedCommandsCache,
+            Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>> commandsByTypeCache)
         {
             // Check if sprite should be visible at this time
             var (start, end) = getSpriteLifetime(storyboardSprite);
@@ -233,37 +237,42 @@ namespace storytor.Game.Screens
             // Reset sprite to default state before applying commands
             resetSpriteToDefault(drawable, storyboardSprite);
 
-            // Expand loop commands into individual commands
-            var allCommands = new List<StoryboardCommand>();
-            foreach (var command in storyboardSprite.Commands)
+            // Use cached expanded commands or expand and cache them
+            if (!expandedCommandsCache.TryGetValue(storyboardSprite, out var allCommands))
             {
-                if (command is LoopCommand loopCmd)
+                allCommands = new List<StoryboardCommand>();
+                foreach (var command in storyboardSprite.Commands)
                 {
-                    //if (storyboardSprite.ImagePath?.Contains("background.png") == true)
-                    //    Console.WriteLine($"🔄 Expanding loop: StartTime={loopCmd.StartTime}, LoopCount={loopCmd.LoopCount}, NestedCommands={loopCmd.LoopCommands.Count}");
-                    var expandedCommands = loopCmd.ExpandLoop();
-                    //if (storyboardSprite.ImagePath?.Contains("background.png") == true)
-                    //    Console.WriteLine($"📈 Expanded to {expandedCommands.Count} commands");
-                    allCommands.AddRange(expandedCommands);
+                    if (command is LoopCommand loopCmd)
+                    {
+                        allCommands.AddRange(loopCmd.ExpandLoop());
+                    }
+                    else
+                    {
+                        allCommands.Add(command);
+                    }
                 }
-                else
-                {
-                    allCommands.Add(command);
-                }
+                expandedCommandsCache[storyboardSprite] = allCommands;
             }
 
-            // Process commands grouped by type to handle multiple commands properly
-            var commandsByType = allCommands.GroupBy(c => c.GetType()).ToList();
+            // Use cached commands by type or group and cache them
+            if (!commandsByTypeCache.TryGetValue(storyboardSprite, out var commandsByType))
+            {
+                commandsByType = allCommands
+                    .GroupBy(c => c.GetType())
+                    .ToDictionary(g => g.Key, g => g.OrderBy(c => c.StartTime).ToList());
+                commandsByTypeCache[storyboardSprite] = commandsByType;
+            }
 
 
             foreach (var commandGroup in commandsByType)
             {
-                var commandsOfType = commandGroup.OrderBy(c => c.StartTime).ToList();
+                var commandsOfType = commandGroup.Value; // Already sorted from cache
 
                 switch (commandGroup.Key.Name)
                 {
                     case nameof(FadeCommand):
-                        var fadeCmd = getActiveCommand(commandsOfType.Cast<FadeCommand>(), timeMs);
+                        var fadeCmd = getActiveCommandOptimizedOptimized(commandsOfType.Cast<FadeCommand>(), timeMs);
                         if (fadeCmd != null)
                         {
                             var opacity = interpolateDoubleValue(timeMs, fadeCmd.StartTime, fadeCmd.EndTime, fadeCmd.StartOpacity, fadeCmd.EndOpacity, fadeCmd.Easing);
@@ -272,7 +281,7 @@ namespace storytor.Game.Screens
                         break;
 
                     case nameof(MoveCommand):
-                        var moveCmd = getActiveCommand(commandsOfType.Cast<MoveCommand>(), timeMs);
+                        var moveCmd = getActiveCommandOptimizedOptimized(commandsOfType.Cast<MoveCommand>(), timeMs);
                         if (moveCmd != null)
                         {
                             var xOffset = (854f - 640f) / 2f; // Same offset as initial position
@@ -284,7 +293,7 @@ namespace storytor.Game.Screens
                         break;
 
                     case nameof(ScaleCommand):
-                        var scaleCmd = getActiveCommand(commandsOfType.Cast<ScaleCommand>(), timeMs);
+                        var scaleCmd = getActiveCommandOptimized(commandsOfType.Cast<ScaleCommand>(), timeMs);
                         if (scaleCmd != null)
                         {
                             var scale = interpolateDoubleValue(timeMs, scaleCmd.StartTime, scaleCmd.EndTime, scaleCmd.StartScale, scaleCmd.EndScale, scaleCmd.Easing);
@@ -293,7 +302,7 @@ namespace storytor.Game.Screens
                         break;
 
                     case nameof(VectorScaleCommand):
-                        var vecScaleCmd = getActiveCommand(commandsOfType.Cast<VectorScaleCommand>(), timeMs);
+                        var vecScaleCmd = getActiveCommandOptimized(commandsOfType.Cast<VectorScaleCommand>(), timeMs);
                         if (vecScaleCmd != null)
                         {
                             var startScale = new osuTK.Vector2(vecScaleCmd.StartScaleX, vecScaleCmd.StartScaleY);
@@ -304,7 +313,7 @@ namespace storytor.Game.Screens
                         break;
 
                     case nameof(RotateCommand):
-                        var rotateCmd = getActiveCommand(commandsOfType.Cast<RotateCommand>(), timeMs);
+                        var rotateCmd = getActiveCommandOptimized(commandsOfType.Cast<RotateCommand>(), timeMs);
                         if (rotateCmd != null)
                         {
                             var angleRad = interpolateDoubleValue(timeMs, rotateCmd.StartTime, rotateCmd.EndTime, rotateCmd.StartAngle, rotateCmd.EndAngle, rotateCmd.Easing);
@@ -315,7 +324,7 @@ namespace storytor.Game.Screens
 
 
                     case nameof(MoveXCommand):
-                        var moveXCmd = getActiveCommand(commandsOfType.Cast<MoveXCommand>(), timeMs);
+                        var moveXCmd = getActiveCommandOptimized(commandsOfType.Cast<MoveXCommand>(), timeMs);
                         if (moveXCmd != null)
                         {
                             var xOffset = (854f - 640f) / 2f;
@@ -325,7 +334,7 @@ namespace storytor.Game.Screens
                         break;
 
                     case nameof(MoveYCommand):
-                        var moveYCmd = getActiveCommand(commandsOfType.Cast<MoveYCommand>(), timeMs);
+                        var moveYCmd = getActiveCommandOptimized(commandsOfType.Cast<MoveYCommand>(), timeMs);
                         if (moveYCmd != null)
                         {
                             var currentY = interpolateDoubleValue(timeMs, moveYCmd.StartTime, moveYCmd.EndTime, moveYCmd.StartY, moveYCmd.EndY, moveYCmd.Easing);
@@ -334,7 +343,7 @@ namespace storytor.Game.Screens
                         break;
 
                     case nameof(ColorCommand):
-                        var colorCmd = getActiveCommand(commandsOfType.Cast<ColorCommand>(), timeMs);
+                        var colorCmd = getActiveCommandOptimized(commandsOfType.Cast<ColorCommand>(), timeMs);
                         if (colorCmd != null)
                         {
                             var currentRed = interpolateDoubleValue(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartRed, colorCmd.EndRed, colorCmd.Easing);
@@ -501,7 +510,7 @@ namespace storytor.Game.Screens
         /// <summary>
         /// Generic function to get the active command at a given time
         /// </summary>
-        private static T getActiveCommand<T>(IEnumerable<T> commands, double timeMs) where T : StoryboardCommand
+        private static T getActiveCommandOptimized<T>(IEnumerable<T> commands, double timeMs) where T : StoryboardCommand
         {
             // Find active command (currently executing)
             var activeCommand = commands
@@ -519,6 +528,42 @@ namespace storytor.Game.Screens
                 .FirstOrDefault();
 
             return lastCompletedCommand;
+        }
+
+        private static T getActiveCommandOptimizedOptimized<T>(IEnumerable<T> commands, double timeMs) where T : StoryboardCommand
+        {
+            var commandList = commands as List<T> ?? commands.ToList();
+            if (!commandList.Any()) return null;
+
+            // Binary search for active command
+            int left = 0, right = commandList.Count - 1;
+            T bestActiveCommand = null;
+            T lastCompletedCommand = null;
+
+            while (left <= right)
+            {
+                int mid = (left + right) / 2;
+                var cmd = commandList[mid];
+
+                if (timeMs >= cmd.StartTime && timeMs <= cmd.EndTime)
+                {
+                    // Found an active command, but keep looking for the most recent one
+                    bestActiveCommand = cmd;
+                    left = mid + 1; // Look for later active commands
+                }
+                else if (timeMs < cmd.StartTime)
+                {
+                    right = mid - 1;
+                }
+                else // timeMs > cmd.EndTime
+                {
+                    if (lastCompletedCommand == null || cmd.EndTime > lastCompletedCommand.EndTime)
+                        lastCompletedCommand = cmd;
+                    left = mid + 1;
+                }
+            }
+
+            return bestActiveCommand ?? lastCompletedCommand;
         }
 
         /// <summary>
