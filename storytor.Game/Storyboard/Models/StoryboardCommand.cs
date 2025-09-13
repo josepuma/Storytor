@@ -1,441 +1,266 @@
-
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Globalization;
 
 namespace storytor.Game.Storyboard.Models
 {
     /// <summary>
-    /// Represents a command that can be applied to a storyboard sprite
+    /// Represents a storyboard command that can be applied to a sprite
     /// </summary>
-    public abstract class StoryboardCommand
+    public class StoryboardCommand
     {
-        /// <summary>
-        /// The type of command (e.g., "F" for Fade)
-        /// </summary>
         public string CommandType { get; set; } = string.Empty;
-        
-        /// <summary>
-        /// Easing type for the command (0 = None, 1 = Out, 2 = In, 3 = InOut)
-        /// </summary>
         public int Easing { get; set; }
+        public double StartTime { get; set; }
+        public double EndTime { get; set; }
         
-        /// <summary>
-        /// Start time of the command in milliseconds
-        /// </summary>
-        public int StartTime { get; set; }
+        // Single value commands (F, S, R, MX, MY)
+        public double StartValue { get; set; }
+        public double EndValue { get; set; }
         
-        /// <summary>
-        /// End time of the command in milliseconds
-        /// </summary>
-        public int EndTime { get; set; }
-    }
-    
-    /// <summary>
-    /// Represents a fade command that controls sprite opacity
-    /// </summary>
-    public class FadeCommand : StoryboardCommand
-    {
-        /// <summary>
-        /// Starting opacity value (0.0 to 1.0)
-        /// </summary>
-        public float StartOpacity { get; set; }
+        // Two value commands (M, V)
+        public double StartX { get; set; }
+        public double StartY { get; set; }
+        public double EndX { get; set; }
+        public double EndY { get; set; }
         
-        /// <summary>
-        /// Ending opacity value (0.0 to 1.0)
-        /// </summary>
-        public float EndOpacity { get; set; }
+        // Color commands (C)
+        public double StartRed { get; set; }
+        public double StartGreen { get; set; }
+        public double StartBlue { get; set; }
+        public double EndRed { get; set; }
+        public double EndGreen { get; set; }
+        public double EndBlue { get; set; }
         
-        public FadeCommand()
-        {
-            CommandType = "F";
-        }
-        
-        public override string ToString()
-        {
-            return $"Fade: {StartOpacity} -> {EndOpacity} ({StartTime}ms - {EndTime}ms)";
-        }
-    }
-    
-    /// <summary>
-    /// Represents a move command that controls sprite position
-    /// </summary>
-    public class MoveCommand : StoryboardCommand
-    {
-        /// <summary>
-        /// Starting X position
-        /// </summary>
-        public float StartX { get; set; }
-        
-        /// <summary>
-        /// Starting Y position
-        /// </summary>
-        public float StartY { get; set; }
-        
-        /// <summary>
-        /// Ending X position
-        /// </summary>
-        public float EndX { get; set; }
-        
-        /// <summary>
-        /// Ending Y position
-        /// </summary>
-        public float EndY { get; set; }
-        
-        public MoveCommand()
-        {
-            CommandType = "M";
-        }
-        
-        public override string ToString()
-        {
-            return $"Move: ({StartX}, {StartY}) -> ({EndX}, {EndY}) ({StartTime}ms - {EndTime}ms)";
-        }
-    }
-    
-    /// <summary>
-    /// Represents a scale command that controls sprite size
-    /// </summary>
-    public class ScaleCommand : StoryboardCommand
-    {
-        /// <summary>
-        /// Starting scale factor
-        /// </summary>
-        public float StartScale { get; set; }
-        
-        /// <summary>
-        /// Ending scale factor
-        /// </summary>
-        public float EndScale { get; set; }
-        
-        public ScaleCommand()
-        {
-            CommandType = "S";
-        }
-        
-        public override string ToString()
-        {
-            return $"Scale: {StartScale} -> {EndScale} ({StartTime}ms - {EndTime}ms)";
-        }
-    }
-    
-    /// <summary>
-    /// Represents a vector scale command that controls sprite size independently on X and Y axes
-    /// </summary>
-    public class VectorScaleCommand : StoryboardCommand
-    {
-        /// <summary>
-        /// Starting X scale factor
-        /// </summary>
-        public float StartScaleX { get; set; }
-        
-        /// <summary>
-        /// Starting Y scale factor
-        /// </summary>
-        public float StartScaleY { get; set; }
-        
-        /// <summary>
-        /// Ending X scale factor
-        /// </summary>
-        public float EndScaleX { get; set; }
-        
-        /// <summary>
-        /// Ending Y scale factor
-        /// </summary>
-        public float EndScaleY { get; set; }
-        
-        public VectorScaleCommand()
-        {
-            CommandType = "V";
-        }
-        
-        public override string ToString()
-        {
-            return $"VectorScale: ({StartScaleX}, {StartScaleY}) -> ({EndScaleX}, {EndScaleY}) ({StartTime}ms - {EndTime}ms)";
-        }
-    }
-    
-    /// <summary>
-    /// Represents a rotate command that controls sprite rotation
-    /// </summary>
-    public class RotateCommand : StoryboardCommand
-    {
-        /// <summary>
-        /// Starting rotation angle in radians
-        /// </summary>
-        public float StartAngle { get; set; }
-        
-        /// <summary>
-        /// Ending rotation angle in radians
-        /// </summary>
-        public float EndAngle { get; set; }
-        
-        public RotateCommand()
-        {
-            CommandType = "R";
-        }
-        
-        public override string ToString()
-        {
-            return $"Rotate: {StartAngle}rad -> {EndAngle}rad ({StartTime}ms - {EndTime}ms)";
-        }
-    }
+        // Parameter commands (P)
+        public string ParameterType { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Represents a parameter command that applies special effects (H, V, A)
-    /// Unlike other commands, parameters only apply while they are active
-    /// </summary>
-    public class ParameterCommand : StoryboardCommand
-    {
-        /// <summary>
-        /// Parameter type: "H" (horizontal flip), "V" (vertical flip), "A" (additive blending)
-        /// </summary>
-        public string Parameter { get; set; } = string.Empty;
-
-        public ParameterCommand()
-        {
-            CommandType = "P";
-        }
-
-        public override string ToString()
-        {
-            return $"Parameter: {Parameter} ({StartTime}ms - {EndTime}ms)";
-        }
-    }
-
-    /// <summary>
-    /// Represents a move X command that controls sprite X position only
-    /// </summary>
-    public class MoveXCommand : StoryboardCommand
-    {
-        /// <summary>
-        /// Starting X position
-        /// </summary>
-        public float StartX { get; set; }
-
-        /// <summary>
-        /// Ending X position
-        /// </summary>
-        public float EndX { get; set; }
-
-        public MoveXCommand()
-        {
-            CommandType = "MX";
-        }
-
-        public override string ToString()
-        {
-            return $"MoveX: {StartX} -> {EndX} ({StartTime}ms - {EndTime}ms)";
-        }
-    }
-
-    /// <summary>
-    /// Represents a move Y command that controls sprite Y position only
-    /// </summary>
-    public class MoveYCommand : StoryboardCommand
-    {
-        /// <summary>
-        /// Starting Y position
-        /// </summary>
-        public float StartY { get; set; }
-
-        /// <summary>
-        /// Ending Y position
-        /// </summary>
-        public float EndY { get; set; }
-
-        public MoveYCommand()
-        {
-            CommandType = "MY";
-        }
-
-        public override string ToString()
-        {
-            return $"MoveY: {StartY} -> {EndY} ({StartTime}ms - {EndTime}ms)";
-        }
-    }
-
-    /// <summary>
-    /// Represents a color command that controls sprite tinting
-    /// </summary>
-    public class ColorCommand : StoryboardCommand
-    {
-        /// <summary>
-        /// Starting red component (0-255)
-        /// </summary>
-        public byte StartRed { get; set; }
-
-        /// <summary>
-        /// Starting green component (0-255)
-        /// </summary>
-        public byte StartGreen { get; set; }
-
-        /// <summary>
-        /// Starting blue component (0-255)
-        /// </summary>
-        public byte StartBlue { get; set; }
-
-        /// <summary>
-        /// Ending red component (0-255)
-        /// </summary>
-        public byte EndRed { get; set; }
-
-        /// <summary>
-        /// Ending green component (0-255)
-        /// </summary>
-        public byte EndGreen { get; set; }
-
-        /// <summary>
-        /// Ending blue component (0-255)
-        /// </summary>
-        public byte EndBlue { get; set; }
-
-        public ColorCommand()
-        {
-            CommandType = "C";
-        }
-
-        public override string ToString()
-        {
-            return $"Color: ({StartRed},{StartGreen},{StartBlue}) -> ({EndRed},{EndGreen},{EndBlue}) ({StartTime}ms - {EndTime}ms)";
-        }
-    }
-
-    /// <summary>
-    /// Represents a loop command that repeats a set of commands
-    /// </summary>
-    public class LoopCommand : StoryboardCommand
-    {
-        /// <summary>
-        /// Number of times the loop executes
-        /// </summary>
-        public int LoopCount { get; set; }
-
-        /// <summary>
-        /// Commands to be repeated within the loop
-        /// </summary>
+        // Loop commands (L) - store original loop structure
+        public bool IsLoop { get; set; } = false;
+        public int LoopCount { get; set; } = 0;
         public List<StoryboardCommand> LoopCommands { get; set; } = new List<StoryboardCommand>();
-
-        public LoopCommand()
-        {
-            CommandType = "L";
-        }
-
+        
         /// <summary>
-        /// Expands the loop into individual commands with absolute timestamps
+        /// Creates a command from OSB line format: CommandType,Easing,StartTime,EndTime,Values...
         /// </summary>
-        /// <returns>List of expanded commands</returns>
-        public List<StoryboardCommand> ExpandLoop()
+        public static StoryboardCommand FromOsbLine(string line)
         {
-            var expandedCommands = new List<StoryboardCommand>();
-
-            // Calculate loop duration based on the longest command inside the loop
-            var loopDuration = LoopCommands.Any() ? LoopCommands.Max(c => c.EndTime) : 0;
-
-            for (int iteration = 0; iteration < LoopCount; iteration++)
+            if (string.IsNullOrWhiteSpace(line)) return null;
+            
+            var values = line.Split(',');
+            if (values.Length < 4) return null;
+            
+            var command = new StoryboardCommand
             {
-                var iterationOffset = StartTime + (iteration * loopDuration);
-
-                foreach (var loopCommand in LoopCommands)
-                {
-                    var expandedCommand = cloneCommandWithOffset(loopCommand, iterationOffset);
-                    expandedCommands.Add(expandedCommand);
-                }
+                CommandType = values[0].Trim(),
+                Easing = int.TryParse(values[1], out int easing) ? easing : 0
+            };
+            
+            // Parse timing
+            if (!double.TryParse(values[2], NumberStyles.Float, CultureInfo.InvariantCulture, out double startTime))
+                return null;
+            command.StartTime = startTime;
+            
+            // Handle end time - if empty, use start time (instant command)
+            if (string.IsNullOrWhiteSpace(values[3]))
+            {
+                command.EndTime = startTime;
             }
-
-            return expandedCommands;
-        }
-
-        private static StoryboardCommand cloneCommandWithOffset(StoryboardCommand original, int offset)
-        {
-            return original switch
+            else if (double.TryParse(values[3], NumberStyles.Float, CultureInfo.InvariantCulture, out double endTime))
             {
-                FadeCommand fade => new FadeCommand
-                {
-                    Easing = fade.Easing,
-                    StartTime = fade.StartTime + offset,
-                    EndTime = fade.EndTime + offset,
-                    StartOpacity = fade.StartOpacity,
-                    EndOpacity = fade.EndOpacity
-                },
-                MoveCommand move => new MoveCommand
-                {
-                    Easing = move.Easing,
-                    StartTime = move.StartTime + offset,
-                    EndTime = move.EndTime + offset,
-                    StartX = move.StartX,
-                    StartY = move.StartY,
-                    EndX = move.EndX,
-                    EndY = move.EndY
-                },
-                ScaleCommand scale => new ScaleCommand
-                {
-                    Easing = scale.Easing,
-                    StartTime = scale.StartTime + offset,
-                    EndTime = scale.EndTime + offset,
-                    StartScale = scale.StartScale,
-                    EndScale = scale.EndScale
-                },
-                VectorScaleCommand vecScale => new VectorScaleCommand
-                {
-                    Easing = vecScale.Easing,
-                    StartTime = vecScale.StartTime + offset,
-                    EndTime = vecScale.EndTime + offset,
-                    StartScaleX = vecScale.StartScaleX,
-                    StartScaleY = vecScale.StartScaleY,
-                    EndScaleX = vecScale.EndScaleX,
-                    EndScaleY = vecScale.EndScaleY
-                },
-                RotateCommand rotate => new RotateCommand
-                {
-                    Easing = rotate.Easing,
-                    StartTime = rotate.StartTime + offset,
-                    EndTime = rotate.EndTime + offset,
-                    StartAngle = rotate.StartAngle,
-                    EndAngle = rotate.EndAngle
-                },
-                ColorCommand color => new ColorCommand
-                {
-                    Easing = color.Easing,
-                    StartTime = color.StartTime + offset,
-                    EndTime = color.EndTime + offset,
-                    StartRed = color.StartRed,
-                    StartGreen = color.StartGreen,
-                    StartBlue = color.StartBlue,
-                    EndRed = color.EndRed,
-                    EndGreen = color.EndGreen,
-                    EndBlue = color.EndBlue
-                },
-                ParameterCommand param => new ParameterCommand
-                {
-                    Easing = param.Easing,
-                    StartTime = param.StartTime + offset,
-                    EndTime = param.EndTime + offset,
-                    Parameter = param.Parameter
-                },
-                MoveXCommand moveX => new MoveXCommand
-                {
-                    Easing = moveX.Easing,
-                    StartTime = moveX.StartTime + offset,
-                    EndTime = moveX.EndTime + offset,
-                    StartX = moveX.StartX,
-                    EndX = moveX.EndX
-                },
-                MoveYCommand moveY => new MoveYCommand
-                {
-                    Easing = moveY.Easing,
-                    StartTime = moveY.StartTime + offset,
-                    EndTime = moveY.EndTime + offset,
-                    StartY = moveY.StartY,
-                    EndY = moveY.EndY
-                },
-                _ => throw new NotSupportedException($"Command type {original.GetType().Name} not supported in loops")
+                command.EndTime = endTime;
+            }
+            else
+            {
+                command.EndTime = startTime;
+            }
+            
+            // Parse values based on command type
+            switch (command.CommandType.ToUpperInvariant())
+            {
+                case "F": // Fade
+                    if (values.Length > 4) 
+                    {
+                        if (double.TryParse(values[4], NumberStyles.Float, CultureInfo.InvariantCulture, out double startValue))
+                            command.StartValue = startValue;
+                    }
+                    if (values.Length > 5) 
+                    {
+                        if (double.TryParse(values[5], NumberStyles.Float, CultureInfo.InvariantCulture, out double endValue))
+                            command.EndValue = endValue;
+                        else 
+                            command.EndValue = command.StartValue;
+                    }
+                    else command.EndValue = command.StartValue;
+                    break;
+                    
+                case "S": // Scale
+                case "R": // Rotate  
+                case "MX": // MoveX
+                case "MY": // MoveY
+                    if (values.Length > 4) 
+                    {
+                        if (double.TryParse(values[4], NumberStyles.Float, CultureInfo.InvariantCulture, out double startValue))
+                            command.StartValue = startValue;
+                    }
+                    if (values.Length > 5) 
+                    {
+                        if (double.TryParse(values[5], NumberStyles.Float, CultureInfo.InvariantCulture, out double endValue))
+                            command.EndValue = endValue;
+                        else 
+                            command.EndValue = command.StartValue;
+                    }
+                    else command.EndValue = command.StartValue;
+                    break;
+                    
+                case "M": // Move
+                case "V": // Vector Scale
+                    if (values.Length > 4) 
+                    {
+                        if (double.TryParse(values[4], NumberStyles.Float, CultureInfo.InvariantCulture, out double startX))
+                            command.StartX = startX;
+                    }
+                    if (values.Length > 5) 
+                    {
+                        if (double.TryParse(values[5], NumberStyles.Float, CultureInfo.InvariantCulture, out double startY))
+                            command.StartY = startY;
+                    }
+                    if (values.Length > 6) 
+                    {
+                        if (double.TryParse(values[6], NumberStyles.Float, CultureInfo.InvariantCulture, out double endX))
+                            command.EndX = endX;
+                        else 
+                            command.EndX = command.StartX;
+                    }
+                    else command.EndX = command.StartX;
+                    if (values.Length > 7) 
+                    {
+                        if (double.TryParse(values[7], NumberStyles.Float, CultureInfo.InvariantCulture, out double endY))
+                            command.EndY = endY;
+                        else 
+                            command.EndY = command.StartY;
+                    }
+                    else command.EndY = command.StartY;
+                    break;
+                    
+                case "C": // Color
+                    if (values.Length > 4) 
+                    {
+                        if (double.TryParse(values[4], NumberStyles.Float, CultureInfo.InvariantCulture, out double startRed))
+                            command.StartRed = startRed;
+                    }
+                    if (values.Length > 5) 
+                    {
+                        if (double.TryParse(values[5], NumberStyles.Float, CultureInfo.InvariantCulture, out double startGreen))
+                            command.StartGreen = startGreen;
+                    }
+                    if (values.Length > 6) 
+                    {
+                        if (double.TryParse(values[6], NumberStyles.Float, CultureInfo.InvariantCulture, out double startBlue))
+                            command.StartBlue = startBlue;
+                    }
+                    if (values.Length > 7) 
+                    {
+                        if (double.TryParse(values[7], NumberStyles.Float, CultureInfo.InvariantCulture, out double endRed))
+                            command.EndRed = endRed;
+                        else 
+                            command.EndRed = command.StartRed;
+                    }
+                    else command.EndRed = command.StartRed;
+                    if (values.Length > 8) 
+                    {
+                        if (double.TryParse(values[8], NumberStyles.Float, CultureInfo.InvariantCulture, out double endGreen))
+                            command.EndGreen = endGreen;
+                        else 
+                            command.EndGreen = command.StartGreen;
+                    }
+                    else command.EndGreen = command.StartGreen;
+                    if (values.Length > 9) 
+                    {
+                        if (double.TryParse(values[9], NumberStyles.Float, CultureInfo.InvariantCulture, out double endBlue))
+                            command.EndBlue = endBlue;
+                        else 
+                            command.EndBlue = command.StartBlue;
+                    }
+                    else command.EndBlue = command.StartBlue;
+                    break;
+                    
+                case "P": // Parameter
+                    if (values.Length > 4) command.ParameterType = values[4].Trim();
+                    break;
+            }
+            
+            return command;
+        }
+        
+        /// <summary>
+        /// Gets the interpolated single value at a specific time (for F, S, R, MX, MY commands)
+        /// </summary>
+        public double GetValueAt(double time)
+        {
+            if (StartTime >= EndTime) return StartValue;
+            
+            double progress = Math.Clamp((time - StartTime) / (EndTime - StartTime), 0.0, 1.0);
+            progress = ApplyEasing(progress, Easing);
+            return Lerp(StartValue, EndValue, progress);
+        }
+        
+        /// <summary>
+        /// Gets the interpolated X,Y values at a specific time (for M, V commands)
+        /// </summary>
+        public (double x, double y) GetPositionAt(double time)
+        {
+            if (StartTime >= EndTime) return (StartX, StartY);
+            
+            double progress = Math.Clamp((time - StartTime) / (EndTime - StartTime), 0.0, 1.0);
+            progress = ApplyEasing(progress, Easing);
+            return (Lerp(StartX, EndX, progress), Lerp(StartY, EndY, progress));
+        }
+        
+        /// <summary>
+        /// Gets the interpolated RGB values at a specific time (for C commands)
+        /// </summary>
+        public (double red, double green, double blue) GetColorAt(double time)
+        {
+            if (StartTime >= EndTime) return (StartRed, StartGreen, StartBlue);
+            
+            double progress = Math.Clamp((time - StartTime) / (EndTime - StartTime), 0.0, 1.0);
+            progress = ApplyEasing(progress, Easing);
+            return (
+                Lerp(StartRed, EndRed, progress),
+                Lerp(StartGreen, EndGreen, progress), 
+                Lerp(StartBlue, EndBlue, progress)
+            );
+        }
+        
+        private static double Lerp(double start, double end, double t) => start + (end - start) * t;
+        
+        private static double ApplyEasing(double t, int easingType)
+        {
+            return easingType switch
+            {
+                1 => 1 - Math.Pow(1 - t, 2), // Ease Out
+                2 => Math.Pow(t, 2), // Ease In  
+                3 => t < 0.5 ? 2 * t * t : 1 - Math.Pow(-2 * t + 2, 2) / 2, // Ease In-Out
+                _ => t // Linear (no easing)
             };
         }
-
+        
         public override string ToString()
         {
-            return $"Loop: {LoopCount} iterations, {LoopCommands.Count} commands ({StartTime}ms)";
+            return CommandType switch
+            {
+                "F" => $"Fade: {StartValue} -> {EndValue} ({StartTime}ms - {EndTime}ms)",
+                "M" => $"Move: ({StartX}, {StartY}) -> ({EndX}, {EndY}) ({StartTime}ms - {EndTime}ms)",
+                "S" => $"Scale: {StartValue} -> {EndValue} ({StartTime}ms - {EndTime}ms)",
+                "V" => $"VectorScale: ({StartX}, {StartY}) -> ({EndX}, {EndY}) ({StartTime}ms - {EndTime}ms)",
+                "R" => $"Rotate: {StartValue} -> {EndValue} ({StartTime}ms - {EndTime}ms)",
+                "C" => $"Color: ({StartRed},{StartGreen},{StartBlue}) -> ({EndRed},{EndGreen},{EndBlue}) ({StartTime}ms - {EndTime}ms)",
+                "P" => $"Parameter: {ParameterType} ({StartTime}ms - {EndTime}ms)",
+                "MX" => $"MoveX: {StartValue} -> {EndValue} ({StartTime}ms - {EndTime}ms)",
+                "MY" => $"MoveY: {StartValue} -> {EndValue} ({StartTime}ms - {EndTime}ms)",
+                _ => $"{CommandType}: ({StartTime}ms - {EndTime}ms)"
+            };
         }
     }
 }

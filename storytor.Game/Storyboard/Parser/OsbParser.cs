@@ -1,180 +1,231 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Threading.Tasks;
 using osu.Framework.Graphics;
 using storytor.Game.Storyboard.Models;
-using storytor.Game.Storyboard.Parser.CommandParsers;
 using storytor.Game.Storyboard.Reader;
 
 namespace storytor.Game.Storyboard.Parser
 {
     /// <summary>
-    /// Main parser for OSB storyboard files
+    /// OSB parser for storyboard files
     /// </summary>
-    public class OsbParser
+    public static class OsbParser
     {
         /// <summary>
-        /// Parses an OSB file and returns a complete Storyboard object
+        /// Parses an OSB file asynchronously and returns a complete Storyboard object
         /// </summary>
-        /// <param name="filePath">Path to the .osb file</param>
-        /// <returns>A parsed Storyboard object</returns>
         public static async Task<StoryboardData> ParseAsync(string filePath)
         {
             string[] lines = await OsbFileReader.ReadOsbFileAsync(filePath);
-            return parse(lines, filePath);
+            return Parse(lines, filePath);
         }
-        
+
         /// <summary>
         /// Parses an OSB file synchronously and returns a complete Storyboard object
         /// </summary>
-        /// <param name="filePath">Path to the .osb file</param>
-        /// <returns>A parsed Storyboard object</returns>
         public static StoryboardData ParseFile(string filePath)
         {
             string[] lines = OsbFileReader.ReadOsbFile(filePath);
-            return parse(lines, filePath);
+            return Parse(lines, filePath);
         }
-        
+
         /// <summary>
-        /// Parses OSB content from an array of lines
+        /// Parses OSB content from lines
         /// </summary>
-        /// <param name="lines">Lines from the OSB file</param>
-        /// <param name="filePath">Original file path for reference</param>
-        /// <returns>A parsed Storyboard object</returns>
-        private static StoryboardData parse(string[] lines, string filePath)
+        public static StoryboardData Parse(string[] lines, string filePath = "")
         {
             var storyboard = new StoryboardData { FilePath = filePath };
             StoryboardSprite currentSprite = null;
-            LoopCommand currentLoop = null;
+            var inCommandGroup = false;
+            var currentGroupCommands = new List<StoryboardCommand>();
+            double? currentLoopStartTime = null;
+            int? currentLoopCount = null;
             int spriteIdCounter = 0;
-            
-            for (int i = 0; i < lines.Length; i++)
+
+            foreach (var line in lines)
             {
-                string trimmedLine = lines[i].Trim();
-                
-                // Skip empty lines and comments
-                if (string.IsNullOrWhiteSpace(trimmedLine) || trimmedLine.StartsWith("//"))
+                if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith("//"))
                     continue;
-                
-                // Check if this is a sprite definition
-                if (isSpriteDefinition(trimmedLine))
+
+                var depth = getIndentationDepth(line);
+                var trimmedLine = line.Trim();
+                var values = trimmedLine.Split(',');
+
+                // Close command group if we're no longer indented
+                if (inCommandGroup && depth < 2)
                 {
-                    // Save previous sprite if it exists
                     if (currentSprite != null)
                     {
-                        storyboard.Sprites.Add(currentSprite);
-                    }
-                    
-                    // Parse new sprite
-                    currentSprite = parseSprite(trimmedLine);
-                    if (currentSprite != null)
-                    {
-                        currentSprite.Id = spriteIdCounter++;
-                    }
-                    currentLoop = null; // Reset loop when starting new sprite
-                }
-                else if (currentSprite != null)
-                {
-                    // Check if this is a loop command
-                    if (LoopCommandParser.IsLoopCommand(trimmedLine))
-                    {
-                        // Parse loop command
-                        currentLoop = LoopCommandParser.ParseLoopCommand(trimmedLine);
-                        if (currentLoop != null)
+                        // If it was a loop, create a loop command structure
+                        if (currentLoopStartTime.HasValue && currentLoopCount.HasValue)
                         {
-                            currentSprite.Commands.Add(currentLoop);
-                        }
-                    }
-                    else if (currentLoop != null && lines[i].StartsWith("  "))
-                    {
-                        // We're inside a loop and the line is indented, parse nested commands
-                        var command = parseCommand(trimmedLine);
-                        if (command != null)
-                        {
-                            currentLoop.LoopCommands.Add(command);
-                            
-                            // Update loop end time based on nested commands
-                            var commandEndTime = command.EndTime > 0 ? command.EndTime : command.StartTime;
-                            if (commandEndTime > currentLoop.EndTime - currentLoop.StartTime)
+                            var loopCommand = new StoryboardCommand
                             {
-                                currentLoop.EndTime = currentLoop.StartTime + commandEndTime;
+                                CommandType = "L",
+                                IsLoop = true,
+                                StartTime = currentLoopStartTime.Value,
+                                EndTime = currentLoopStartTime.Value, // Will be calculated during rendering
+                                LoopCount = currentLoopCount.Value,
+                                LoopCommands = new List<StoryboardCommand>(currentGroupCommands)
+                            };
+                            currentSprite.Commands.Add(loopCommand);
+                        }
+                        else
+                        {
+                            // Regular group commands (triggers, etc.)
+                            foreach (var groupCommand in currentGroupCommands)
+                            {
+                                currentSprite.Commands.Add(groupCommand);
                             }
                         }
                     }
-                    else
-                    {
-                        // Not indented or not in a loop - this closes any current loop
-                        currentLoop = null;
-                        
-                        // Regular command for the current sprite
-                        var command = parseCommand(trimmedLine);
-                        if (command != null)
+                    inCommandGroup = false;
+                    currentGroupCommands.Clear();
+                    currentLoopStartTime = null;
+                    currentLoopCount = null;
+                }
+
+                switch (values[0])
+                {
+                    case "Sprite":
+                        // Save previous sprite if it exists
+                        if (currentSprite != null)
                         {
-                            currentSprite.Commands.Add(command);
+                            storyboard.Sprites.Add(currentSprite);
                         }
+
+                        currentSprite = parseSprite(values);
+                        if (currentSprite != null)
+                        {
+                            currentSprite.Id = spriteIdCounter++;
+                        }
+                        break;
+
+                    case "Animation":
+                        // Save previous sprite if it exists
+                        if (currentSprite != null)
+                        {
+                            storyboard.Sprites.Add(currentSprite);
+                        }
+
+                        currentSprite = parseAnimation(values);
+                        if (currentSprite != null)
+                        {
+                            currentSprite.Id = spriteIdCounter++;
+                        }
+                        break;
+
+                    case "L": // Loop
+                        currentLoopStartTime = double.Parse(values[1], CultureInfo.InvariantCulture);
+                        currentLoopCount = int.Parse(values[2]);
+                        inCommandGroup = true;
+                        currentGroupCommands.Clear();
+                        break;
+
+                    case "T": // Trigger (similar to loop handling)
+                        inCommandGroup = true;
+                        currentGroupCommands.Clear();
+                        break;
+
+                    default:
+                        // Regular command
+                        var command = StoryboardCommand.FromOsbLine(trimmedLine);
+                        if (command != null && currentSprite != null)
+                        {
+                            if (inCommandGroup)
+                            {
+                                currentGroupCommands.Add(command);
+                            }
+                            else
+                            {
+                                currentSprite.Commands.Add(command);
+                            }
+                        }
+                        break;
+                }
+            }
+
+            // Don't forget the last sprite and any remaining group commands
+            if (inCommandGroup && currentSprite != null)
+            {
+                if (currentLoopStartTime.HasValue && currentLoopCount.HasValue)
+                {
+                    var loopCommand = new StoryboardCommand
+                    {
+                        CommandType = "L",
+                        IsLoop = true,
+                        StartTime = currentLoopStartTime.Value,
+                        EndTime = currentLoopStartTime.Value,
+                        LoopCount = currentLoopCount.Value,
+                        LoopCommands = new List<StoryboardCommand>(currentGroupCommands)
+                    };
+                    currentSprite.Commands.Add(loopCommand);
+                }
+                else
+                {
+                    foreach (var groupCommand in currentGroupCommands)
+                    {
+                        currentSprite.Commands.Add(groupCommand);
                     }
                 }
             }
-            
-            // Don't forget the last sprite
+
             if (currentSprite != null)
             {
                 storyboard.Sprites.Add(currentSprite);
             }
-            
+
             return storyboard;
         }
-        
-        /// <summary>
-        /// Checks if a line represents a sprite definition
-        /// </summary>
-        private static bool isSpriteDefinition(string line)
+
+        private static StoryboardSprite parseSprite(string[] values)
         {
-            return line.StartsWith("Sprite,", StringComparison.OrdinalIgnoreCase);
-        }
-        
-        /// <summary>
-        /// Parses a sprite definition line
-        /// </summary>
-        private static StoryboardSprite parseSprite(string line)
-        {
-            // Format: Sprite,layer,origin,filepath,x,y
-            string[] parts = line.Split(',');
-            
-            if (parts.Length < 6)
-                return null;
-            
+            if (values.Length < 6) return null;
+
             try
             {
-                var sprite = new StoryboardSprite
+                return new StoryboardSprite
                 {
-                    Layer = parts[1].Trim(),
-                    Origin = parseOrigin(parts[2].Trim()),
-                    ImagePath = parts[3].Trim().Trim('"'), // Remove quotes if present
+                    Layer = values[1].Trim(),
+                    Origin = parseOrigin(values[2].Trim()),
+                    ImagePath = removeQuotes(values[3].Trim()),
+                    X = float.Parse(values[4], CultureInfo.InvariantCulture),
+                    Y = float.Parse(values[5], CultureInfo.InvariantCulture)
                 };
-                
-                // Parse X and Y coordinates
-                if (float.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out float x))
-                {
-                    sprite.X = x;
-                }
-                
-                if (float.TryParse(parts[5], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
-                {
-                    sprite.Y = y;
-                }
-                
-                return sprite;
             }
             catch (Exception)
             {
                 return null;
             }
         }
-        
-        /// <summary>
-        /// Parses the origin string to an Anchor enum
-        /// </summary>
+
+        private static StoryboardSprite parseAnimation(string[] values)
+        {
+            if (values.Length < 9) return null;
+
+            try
+            {
+                return new StoryboardSprite
+                {
+                    Layer = values[1].Trim(),
+                    Origin = parseOrigin(values[2].Trim()),
+                    ImagePath = removeQuotes(values[3].Trim()),
+                    X = float.Parse(values[4], CultureInfo.InvariantCulture),
+                    Y = float.Parse(values[5], CultureInfo.InvariantCulture),
+                    // Animation-specific properties could be added to StoryboardSprite if needed
+                    // FrameCount = int.Parse(values[6]),
+                    // FrameDelay = double.Parse(values[7], CultureInfo.InvariantCulture),
+                    // LoopType = values[8]
+                };
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
         private static Anchor parseOrigin(string origin)
         {
             return origin.ToLowerInvariant() switch
@@ -188,65 +239,24 @@ namespace storytor.Game.Storyboard.Parser
                 "bottomleft" => Anchor.BottomLeft,
                 "bottomcentre" or "bottomcenter" => Anchor.BottomCentre,
                 "bottomright" => Anchor.BottomRight,
-                _ => Anchor.Centre // Default fallback
+                _ => Anchor.Centre
             };
         }
-        
-        /// <summary>
-        /// Attempts to parse a command from a line
-        /// </summary>
-        private static StoryboardCommand parseCommand(string line)
+
+        private static string removeQuotes(string path)
         {
-            string trimmedLine = line.Trim();
-            
-            // Try all command parsers
-            if (FadeCommandParser.IsFadeCommand(trimmedLine))
-            {
-                return FadeCommandParser.ParseFadeCommand(trimmedLine);
-            }
-            
-            if (CommandParsers.MoveCommandParser.IsMoveCommand(trimmedLine))
-            {
-                return CommandParsers.MoveCommandParser.ParseMoveCommand(trimmedLine);
-            }
-            
-            if (ScaleCommandParser.IsScaleCommand(trimmedLine))
-            {
-                return ScaleCommandParser.ParseScaleCommand(trimmedLine);
-            }
-            
-            if (VectorScaleCommandParser.IsVectorScaleCommand(trimmedLine))
-            {
-                return VectorScaleCommandParser.ParseVectorScaleCommand(trimmedLine);
-            }
-            
-            if (RotateCommandParser.IsRotateCommand(trimmedLine))
-            {
-                return RotateCommandParser.ParseRotateCommand(trimmedLine);
-            }
-            
-            if (ParameterCommandParser.IsParameterCommand(trimmedLine))
-            {
-                return ParameterCommandParser.ParseParameterCommand(trimmedLine);
-            }
-            
-            if (MoveXCommandParser.IsMoveXCommand(trimmedLine))
-            {
-                return MoveXCommandParser.ParseMoveXCommand(trimmedLine);
-            }
-            
-            if (MoveYCommandParser.IsMoveYCommand(trimmedLine))
-            {
-                return MoveYCommandParser.ParseMoveYCommand(trimmedLine);
-            }
-            
-            if (ColorCommandParser.IsColorCommand(trimmedLine))
-            {
-                return ColorCommandParser.ParseColorCommand(trimmedLine);
-            }
-            
-            // Unknown command type
-            return null;
+            return path.StartsWith("\"") && path.EndsWith("\"")
+                ? path[1..^1]
+                : path;
         }
+
+        private static int getIndentationDepth(string line)
+        {
+            int depth = 0;
+            while (depth < line.Length && line[depth] == ' ')
+                depth++;
+            return depth;
+        }
+
     }
 }

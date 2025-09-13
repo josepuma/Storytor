@@ -76,11 +76,11 @@ namespace storytor.Game.Storyboard
             Console.WriteLine($"Total Sprites: {storyboard.Sprites.Count}");
             Console.WriteLine($"Total Commands: {storyboard.TotalCommands}");
             // Count different command types
-            var fadeCommands = storyboard.Sprites.SelectMany(s => s.Commands).OfType<FadeCommand>().Count();
-            var moveCommands = storyboard.Sprites.SelectMany(s => s.Commands).OfType<MoveCommand>().Count();
-            var scaleCommands = storyboard.Sprites.SelectMany(s => s.Commands).OfType<ScaleCommand>().Count();
-            var vectorScaleCommands = storyboard.Sprites.SelectMany(s => s.Commands).OfType<VectorScaleCommand>().Count();
-            var rotateCommands = storyboard.Sprites.SelectMany(s => s.Commands).OfType<RotateCommand>().Count();
+            var fadeCommands = storyboard.Sprites.SelectMany(s => s.Commands).Count(c => c.CommandType == "F");
+            var moveCommands = storyboard.Sprites.SelectMany(s => s.Commands).Count(c => c.CommandType == "M");
+            var scaleCommands = storyboard.Sprites.SelectMany(s => s.Commands).Count(c => c.CommandType == "S");
+            var vectorScaleCommands = storyboard.Sprites.SelectMany(s => s.Commands).Count(c => c.CommandType == "V");
+            var rotateCommands = storyboard.Sprites.SelectMany(s => s.Commands).Count(c => c.CommandType == "R");
             
             Console.WriteLine($"📊 Command Types:");
             Console.WriteLine($"   Fade: {fadeCommands}");
@@ -92,13 +92,13 @@ namespace storytor.Game.Storyboard
             // Show some sample commands for debugging
             if (rotateCommands > 0)
             {
-                var firstRotate = storyboard.Sprites.SelectMany(s => s.Commands).OfType<RotateCommand>().First();
+                var firstRotate = storyboard.Sprites.SelectMany(s => s.Commands).First(c => c.CommandType == "R");
                 Console.WriteLine($"   Sample Rotate: {firstRotate}");
             }
             
             if (vectorScaleCommands > 0)
             {
-                var firstVectorScale = storyboard.Sprites.SelectMany(s => s.Commands).OfType<VectorScaleCommand>().First();
+                var firstVectorScale = storyboard.Sprites.SelectMany(s => s.Commands).First(c => c.CommandType == "V");
                 Console.WriteLine($"   Sample VectorScale: {firstVectorScale}");
             }
             

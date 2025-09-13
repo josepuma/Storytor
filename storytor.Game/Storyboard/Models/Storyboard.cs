@@ -42,11 +42,11 @@ namespace storytor.Game.Storyboard.Models
         /// Gets all fade commands across all sprites
         /// </summary>
         /// <returns>All fade commands in the storyboard</returns>
-        public IEnumerable<FadeCommand> GetAllFadeCommands()
+        public IEnumerable<StoryboardCommand> GetAllFadeCommands()
         {
             return Sprites
                 .SelectMany(sprite => sprite.Commands)
-                .OfType<FadeCommand>();
+                .Where(cmd => cmd.CommandType == "F");
         }
         
         public override string ToString()

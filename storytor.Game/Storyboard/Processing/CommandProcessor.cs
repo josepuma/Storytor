@@ -53,13 +53,13 @@ namespace storytor.Game.Storyboard.Processing
         /// Gets active parameter commands, handling persistent parameters correctly
         /// Single persistent parameters apply for the entire sprite lifetime, ignoring their StartTime
         /// </summary>
-        public static List<ParameterCommand> GetActiveParameterCommands(
-            IEnumerable<ParameterCommand> commands,
+        public static List<StoryboardCommand> GetActiveParameterCommands(
+            IEnumerable<StoryboardCommand> commands,
             double timeMs)
         {
-            var result = new List<ParameterCommand>();
+            var result = new List<StoryboardCommand>();
 
-            foreach (var cmd in commands)
+            foreach (var cmd in commands.Where(c => c.CommandType == "P"))
             {
                 if (cmd.StartTime == cmd.EndTime)
                 {

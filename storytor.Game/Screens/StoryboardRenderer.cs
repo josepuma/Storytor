@@ -1,89 +1,85 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.Textures;
 using osu.Framework.Platform;
+using osuTK;
 using storytor.Game.Storyboard.Models;
-using storytor.Game.Storyboard.Utils;
-using storytor.Game.Storyboard.Processing;
+using storytor.Game.Storyboard.Rendering;
 
 namespace storytor.Game.Screens
 {
     /// <summary>
-    /// Renders a storyboard with proper timing and sprite management
+    /// Simplified StoryboardRenderer using timeline-based rendering
     /// </summary>
     public partial class StoryboardRenderer : Container
     {
-        [Resolved]
-        private GameHost host { get; set; } = null!;
-
         private readonly StoryboardData storyboard;
         private readonly string basePath;
-        private readonly Dictionary<StoryboardSprite, AnimatedStoryboardSprite> spriteDrawables = new Dictionary<StoryboardSprite, AnimatedStoryboardSprite>();
-        private readonly Dictionary<StoryboardSprite, List<StoryboardCommand>> expandedCommandsCache = new Dictionary<StoryboardSprite, List<StoryboardCommand>>();
-        private readonly Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>> commandsByTypeCache = new Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>>();
-        private readonly Dictionary<string, Texture> textureCache = new Dictionary<string, Texture>();
-        private const int MAX_TEXTURE_CACHE_SIZE = 100; // Limit cache size to prevent memory issues
+        private readonly Dictionary<StoryboardSprite, SpriteTimelineManager> timelineManagers = new();
+        private readonly Dictionary<StoryboardSprite, AnimatedStoryboardSprite> spriteDrawables = new();
+        private readonly Dictionary<string, Texture> textureCache = new();
+        
+        [Resolved]
+        private GameHost host { get; set; } = null!;
+        
         private Container storyboardContainer;
+        private const float STORYBOARD_WIDTH = 854f;
+        private const float STORYBOARD_HEIGHT = 480f;
+        private const float X_OFFSET = (STORYBOARD_WIDTH - 640f) / 2f;
 
         public StoryboardRenderer(StoryboardData storyboard, string basePath)
         {
             this.storyboard = storyboard;
             this.basePath = basePath;
-
-            // Configure storyboard container to fill the entire screen
+            
             RelativeSizeAxes = Axes.Both;
-
-            // Create a inner container for osu! coordinate system (854x480)
-            // that scales to fit the screen height and maintains aspect ratio
+            
+            // Create storyboard coordinate container
             storyboardContainer = new Container
             {
-                Size = new osuTK.Vector2(854, 480), // osu! storyboard dimensions (16:9)
+                Size = new Vector2(STORYBOARD_WIDTH, STORYBOARD_HEIGHT),
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
-                Name = "StoryboardCoordinateContainer"
+                Name = "StoryboardContainer"
             };
+            
             Add(storyboardContainer);
         }
 
         [BackgroundDependencyLoader]
         private void load()
         {
-            // Create drawable sprites for each storyboard sprite
-            foreach (var storyboardSprite in storyboard.Sprites)
+            // Initialize timeline managers and create drawable sprites for all sprites
+            foreach (var sprite in storyboard.Sprites)
             {
-                try
+                timelineManagers[sprite] = new SpriteTimelineManager(sprite);
+                
+                // Create drawable sprite
+                var drawable = createSpriteDrawable(sprite);
+                if (drawable != null)
                 {
-                    var drawable = createDrawableSprite(storyboardSprite);
-                    if (drawable != null)
-                    {
-                        spriteDrawables[storyboardSprite] = drawable;
-                        storyboardContainer.Add(drawable);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Failed to create drawable for sprite {storyboardSprite.ImagePath}: {ex.Message}");
+                    spriteDrawables[sprite] = drawable;
+                    storyboardContainer.Add(drawable);
                 }
             }
         }
 
-        private AnimatedStoryboardSprite createDrawableSprite(StoryboardSprite storyboardSprite)
+        private AnimatedStoryboardSprite createSpriteDrawable(StoryboardSprite sprite)
         {
             // Clean and normalize the image path
-            var cleanImagePath = storyboardSprite.ImagePath?.Trim().Trim('"') ?? "";
-
+            var cleanImagePath = sprite.ImagePath?.Trim().Trim('"') ?? "";
+            
             if (string.IsNullOrEmpty(cleanImagePath))
             {
                 return null;
             }
-
-            // Try different path combinations
+            
+            // Try different path combinations like the original
             var possiblePaths = new[]
             {
                 Path.Combine(basePath, cleanImagePath.Replace('\\', '/')),
@@ -93,7 +89,7 @@ namespace storytor.Game.Screens
                 Path.Combine(basePath, "SB", cleanImagePath.Replace('\\', '/')),
                 cleanImagePath // Try absolute path
             };
-
+            
             string foundPath = null;
             foreach (var path in possiblePaths)
             {
@@ -103,33 +99,27 @@ namespace storytor.Game.Screens
                     break;
                 }
             }
-
+            
             if (foundPath == null)
             {
                 return null;
             }
-
+            
             try
             {
                 // Use texture cache to avoid loading the same texture multiple times
-                Texture texture = getOrLoadTexture(foundPath);
-
+                var texture = getOrLoadTexture(foundPath);
+                
                 // Create animated sprite with adjusted coordinates for 16:9 container
-                // osu! coordinates are based on 640x480, but we use 854x480
-                // So we need to offset X coordinates to center the 640-wide content in 854-wide container
-                var xOffset = (854f - 640f) / 2f; // 107 pixels offset to center
-                var adjustedX = storyboardSprite.X + xOffset;
-
-                var drawable = new AnimatedStoryboardSprite(storyboardSprite, texture)
+                var adjustedX = sprite.X + X_OFFSET;
+                
+                var drawable = new AnimatedStoryboardSprite(sprite, texture)
                 {
-                    Position = new osuTK.Vector2(adjustedX, storyboardSprite.Y),
-                    Origin = storyboardSprite.Origin,
-                    Alpha = 0 // Start invisible, will be controlled by fade commands
+                    Position = new Vector2(adjustedX, sprite.Y),
+                    Origin = sprite.Origin,
+                    Alpha = 0 // Start invisible, will be controlled by timeline
                 };
-
-                // Set initial state based on first commands to avoid sudden jumps
-                setInitialSpriteState(drawable, storyboardSprite);
-
+                
                 return drawable;
             }
             catch (Exception)
@@ -138,362 +128,40 @@ namespace storytor.Game.Screens
             }
         }
 
-        /// <summary>
-        /// Gets a texture from cache or loads it from disk if not cached
-        /// </summary>
-        /// <param name="imagePath">Path to the image file</param>
-        /// <returns>The loaded texture</returns>
         private Texture getOrLoadTexture(string imagePath)
         {
             // Use the full path as cache key
             if (textureCache.TryGetValue(imagePath, out var cachedTexture))
-            {
                 return cachedTexture;
-            }
 
-            // Load texture from file
-            Texture texture;
-            using var stream = File.OpenRead(imagePath);
-            texture = Texture.FromStream(host.Renderer, stream);
-
-            // Check if cache is getting too large and clean if necessary
-            if (textureCache.Count >= MAX_TEXTURE_CACHE_SIZE)
+            try
             {
-                cleanTextureCache();
+                using var stream = File.OpenRead(imagePath);
+                var texture = Texture.FromStream(host.Renderer, stream);
+                textureCache[imagePath] = texture;
+                return texture;
             }
-
-            // Cache the texture for reuse
-            textureCache[imagePath] = texture;
-
-            // Log cache size for monitoring (can be removed in production)
-            if (textureCache.Count % 10 == 0)
+            catch (Exception ex)
             {
-                Console.WriteLine($"🎨 Texture cache size: {textureCache.Count} textures");
+                Console.WriteLine($"Failed to load texture {imagePath}: {ex.Message}");
+                return null;
             }
-
-            return texture;
         }
 
-        /// <summary>
-        /// Cleans the texture cache by removing half of the cached textures
-        /// This helps prevent memory issues when the cache grows too large
-        /// </summary>
-        private void cleanTextureCache()
+        private Anchor convertOriginToAnchor(Anchor origin)
         {
-            var texturesToRemove = textureCache.Take(textureCache.Count / 2).ToList();
-
-            foreach (var kvp in texturesToRemove)
-            {
-                // Dispose the texture to free GPU memory
-                kvp.Value?.Dispose();
-                textureCache.Remove(kvp.Key);
-            }
-
-            Console.WriteLine($"🧹 Cleaned texture cache. Removed {texturesToRemove.Count} textures. Cache size now: {textureCache.Count}");
+            // Direct mapping since osu.Framework uses the same enum values
+            return origin;
         }
-
-        /// <summary>
-        /// Updates the renderer with the current audio time
-        /// </summary>
-        /// <param name="timeMs">Current time in milliseconds</param>
-        public void UpdateTime(double timeMs)
-        {
-            // Update all sprite animations
-
-            foreach (var (storyboardSprite, drawable) in spriteDrawables)
-            {
-                updateSpriteAtTime(drawable, storyboardSprite, timeMs, expandedCommandsCache, commandsByTypeCache);
-            }
-        }
-
-        private static void updateSpriteAtTime(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite, double timeMs,
-            Dictionary<StoryboardSprite, List<StoryboardCommand>> expandedCommandsCache,
-            Dictionary<StoryboardSprite, Dictionary<Type, List<StoryboardCommand>>> commandsByTypeCache)
-        {
-            // Check if sprite should be visible at this time
-            if (!SpriteLifetimeManager.IsSpriteVisible(storyboardSprite, timeMs))
-            {
-                // Outside sprite lifetime - make invisible
-                drawable.Alpha = 0;
-                return;
-            }
-
-            // Reset sprite to default state before applying commands
-            resetSpriteToDefault(drawable, storyboardSprite);
-
-            // Use cached expanded commands or expand and cache them
-            if (!expandedCommandsCache.TryGetValue(storyboardSprite, out var allCommands))
-            {
-                allCommands = new List<StoryboardCommand>();
-                foreach (var command in storyboardSprite.Commands)
-                {
-                    if (command is LoopCommand loopCmd)
-                    {
-                        allCommands.AddRange(loopCmd.ExpandLoop());
-                    }
-                    else
-                    {
-                        allCommands.Add(command);
-                    }
-                }
-                expandedCommandsCache[storyboardSprite] = allCommands;
-            }
-
-            // Use cached commands by type or group and cache them
-            if (!commandsByTypeCache.TryGetValue(storyboardSprite, out var commandsByType))
-            {
-                commandsByType = allCommands
-                    .GroupBy(c => c.GetType())
-                    .ToDictionary(g => g.Key, g => g.OrderBy(c => c.StartTime).ToList());
-                commandsByTypeCache[storyboardSprite] = commandsByType;
-            }
-
-
-            foreach (var commandGroup in commandsByType)
-            {
-                var commandsOfType = commandGroup.Value; // Already sorted from cache
-
-                switch (commandGroup.Key.Name)
-                {
-                    case nameof(FadeCommand):
-                        var fadeCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<FadeCommand>(), timeMs);
-                        if (fadeCmd != null)
-                        {
-                            var opacity = AnimationUtils.InterpolateDouble(timeMs, fadeCmd.StartTime, fadeCmd.EndTime, fadeCmd.StartOpacity, fadeCmd.EndOpacity, fadeCmd.Easing);
-                            drawable.Alpha = Math.Clamp((float)opacity, 0f, 1f);
-                        }
-                        break;
-
-                    case nameof(MoveCommand):
-                        var moveCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<MoveCommand>(), timeMs);
-                        if (moveCmd != null)
-                        {
-                            var xOffset = (854f - 640f) / 2f; // Same offset as initial position
-                            var startPos = new osuTK.Vector2(moveCmd.StartX + xOffset, moveCmd.StartY);
-                            var endPos = new osuTK.Vector2(moveCmd.EndX + xOffset, moveCmd.EndY);
-                            var currentPos = AnimationUtils.InterpolateVector2(timeMs, moveCmd.StartTime, moveCmd.EndTime, startPos, endPos, moveCmd.Easing);
-                            drawable.Position = currentPos;
-                        }
-                        break;
-
-                    case nameof(ScaleCommand):
-                        var scaleCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<ScaleCommand>(), timeMs);
-                        if (scaleCmd != null)
-                        {
-                            var scale = AnimationUtils.InterpolateDouble(timeMs, scaleCmd.StartTime, scaleCmd.EndTime, scaleCmd.StartScale, scaleCmd.EndScale, scaleCmd.Easing);
-                            drawable.Scale = new osuTK.Vector2((float)scale);
-                        }
-                        break;
-
-                    case nameof(VectorScaleCommand):
-                        var vecScaleCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<VectorScaleCommand>(), timeMs);
-                        if (vecScaleCmd != null)
-                        {
-                            var startScale = new osuTK.Vector2(vecScaleCmd.StartScaleX, vecScaleCmd.StartScaleY);
-                            var endScale = new osuTK.Vector2(vecScaleCmd.EndScaleX, vecScaleCmd.EndScaleY);
-                            var currentScale = AnimationUtils.InterpolateVector2(timeMs, vecScaleCmd.StartTime, vecScaleCmd.EndTime, startScale, endScale, vecScaleCmd.Easing);
-                            drawable.Scale = currentScale;
-                        }
-                        break;
-
-                    case nameof(RotateCommand):
-                        var rotateCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<RotateCommand>(), timeMs);
-                        if (rotateCmd != null)
-                        {
-                            var angleRad = AnimationUtils.InterpolateDouble(timeMs, rotateCmd.StartTime, rotateCmd.EndTime, rotateCmd.StartAngle, rotateCmd.EndAngle, rotateCmd.Easing);
-                            var angleDegrees = (float)(angleRad * 180.0 / Math.PI);
-                            drawable.Rotation = angleDegrees;
-                        }
-                        break;
-
-                    case nameof(MoveXCommand):
-                        var moveXCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<MoveXCommand>(), timeMs);
-                        if (moveXCmd != null)
-                        {
-                            var xOffset = (854f - 640f) / 2f;
-                            var currentX = AnimationUtils.InterpolateDouble(timeMs, moveXCmd.StartTime, moveXCmd.EndTime, moveXCmd.StartX + xOffset, moveXCmd.EndX + xOffset, moveXCmd.Easing);
-                            drawable.Position = new osuTK.Vector2((float)currentX, drawable.Position.Y);
-                        }
-                        break;
-
-                    case nameof(MoveYCommand):
-                        var moveYCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<MoveYCommand>(), timeMs);
-                        if (moveYCmd != null)
-                        {
-                            var currentY = AnimationUtils.InterpolateDouble(timeMs, moveYCmd.StartTime, moveYCmd.EndTime, moveYCmd.StartY, moveYCmd.EndY, moveYCmd.Easing);
-                            drawable.Position = new osuTK.Vector2(drawable.Position.X, (float)currentY);
-                        }
-                        break;
-
-                    case nameof(ColorCommand):
-                        var colorCmd = CommandProcessor.GetActiveCommand(commandsOfType.Cast<ColorCommand>(), timeMs);
-                        if (colorCmd != null)
-                        {
-                            var currentRed = AnimationUtils.InterpolateDouble(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartRed, colorCmd.EndRed, colorCmd.Easing);
-                            var currentGreen = AnimationUtils.InterpolateDouble(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartGreen, colorCmd.EndGreen, colorCmd.Easing);
-                            var currentBlue = AnimationUtils.InterpolateDouble(timeMs, colorCmd.StartTime, colorCmd.EndTime, colorCmd.StartBlue, colorCmd.EndBlue, colorCmd.Easing);
-
-                            var red = Math.Clamp((float)(currentRed / 255.0), 0f, 1f);
-                            var green = Math.Clamp((float)(currentGreen / 255.0), 0f, 1f);
-                            var blue = Math.Clamp((float)(currentBlue / 255.0), 0f, 1f);
-
-                            // Preserve the current alpha from fade commands
-                            var currentAlpha = drawable.Alpha;
-                            drawable.Colour = new Colour4(red, green, blue, 1.0f);
-                        }
-                        break;
-
-                    case nameof(ParameterCommand):
-                        // Obtener parámetros activos
-                        var parameterCmds = CommandProcessor.GetActiveParameterCommands(
-                            commandsOfType.Cast<ParameterCommand>(),
-                            timeMs
-                        );
-
-                        foreach (var paramCmd in parameterCmds)
-                        {
-                            switch (paramCmd.Parameter)
-                            {
-                                case "H":
-                                    // Flip horizontal (negamos X)
-                                    drawable.Scale = new osuTK.Vector2(-Math.Abs(drawable.Scale.X), drawable.Scale.Y);
-                                    break;
-
-                                case "V":
-                                    // Flip vertical (negamos Y)
-                                    drawable.Scale = new osuTK.Vector2(drawable.Scale.X, -Math.Abs(drawable.Scale.Y));
-                                    break;
-
-                                case "A":
-                                    // Additive blending
-                                    drawable.Blending = BlendingParameters.Additive;
-                                    break;
-                            }
-                        }
-                        break;
-
-
-                    default:
-                        break;
-                }
-            }
-        }
-
-
-        private static void setInitialSpriteState(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite)
-        {
-            // Both initial state and reset use the same logic to prevent sudden jumps
-            applySpriteBaseState(drawable, storyboardSprite);
-        }
-
-        private static void resetSpriteToDefault(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite)
-        {
-            // Reset to sprite's initial state (same as setInitialSpriteState)
-            applySpriteBaseState(drawable, storyboardSprite);
-        }
-
-        private static void applySpriteBaseState(AnimatedStoryboardSprite drawable, StoryboardSprite storyboardSprite)
-        {
-            var xOffset = (854f - 640f) / 2f;
-
-            // Find first command of each type to get initial values
-            var firstFade = storyboardSprite.Commands.OfType<FadeCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
-            var firstMove = storyboardSprite.Commands.OfType<MoveCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
-            var firstMoveX = storyboardSprite.Commands.OfType<MoveXCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
-            var firstMoveY = storyboardSprite.Commands.OfType<MoveYCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
-            var firstScale = storyboardSprite.Commands.OfType<ScaleCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
-            var firstVectorScale = storyboardSprite.Commands.OfType<VectorScaleCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
-            var firstRotate = storyboardSprite.Commands.OfType<RotateCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
-            var firstColor = storyboardSprite.Commands.OfType<ColorCommand>().OrderBy(c => c.StartTime).FirstOrDefault();
-
-            // Set position (prioritize specific move commands over general move command)
-            var initialX = storyboardSprite.X + xOffset;
-            var initialY = storyboardSprite.Y;
-
-            if (firstMoveX != null)
-            {
-                initialX = firstMoveX.StartX + xOffset;
-            }
-            else if (firstMove != null)
-            {
-                initialX = firstMove.StartX + xOffset;
-            }
-
-            if (firstMoveY != null)
-            {
-                initialY = firstMoveY.StartY;
-            }
-            else if (firstMove != null)
-            {
-                initialY = firstMove.StartY;
-            }
-
-            drawable.Position = new osuTK.Vector2(initialX, initialY);
-
-            // Set alpha (use first fade command start value if available)
-            if (firstFade != null)
-            {
-                drawable.Alpha = Math.Clamp((float)firstFade.StartOpacity, 0f, 1f);
-            }
-            else
-            {
-                drawable.Alpha = 1.0f; // Default visible
-            }
-
-            // Set scale (prioritize vector scale over uniform scale)
-            if (firstVectorScale != null)
-            {
-                drawable.Scale = new osuTK.Vector2(firstVectorScale.StartScaleX, firstVectorScale.StartScaleY);
-            }
-            else if (firstScale != null)
-            {
-                drawable.Scale = new osuTK.Vector2((float)firstScale.StartScale);
-            }
-            else
-            {
-                drawable.Scale = new osuTK.Vector2(1.0f); // Default scale
-            }
-
-            // Set rotation
-            if (firstRotate != null)
-            {
-                var angleDegrees = (float)(firstRotate.StartAngle * 180.0 / Math.PI);
-                drawable.Rotation = angleDegrees;
-            }
-            else
-            {
-                drawable.Rotation = 0.0f; // Default rotation
-            }
-
-            // Set color (use first color command start value if available)
-            if (firstColor != null)
-            {
-                var red = Math.Clamp(firstColor.StartRed / 255.0f, 0f, 1f);
-                var green = Math.Clamp(firstColor.StartGreen / 255.0f, 0f, 1f);
-                var blue = Math.Clamp(firstColor.StartBlue / 255.0f, 0f, 1f);
-                drawable.Colour = new Colour4(red, green, blue, 1.0f);
-            }
-            else
-            {
-                drawable.Colour = Colour4.White; // Default white (no tinting)
-            }
-
-            // Reset blending to default (will be overridden by Parameter commands if active)
-            drawable.Blending = BlendingParameters.Mixture;
-        }
-
-
-
-
 
         protected override void Update()
         {
             base.Update();
-
+            
             // Update container scale to maintain aspect ratio while fitting screen
             updateContainerScale();
         }
-
+        
         private void updateContainerScale()
         {
             if (storyboardContainer == null) return;
@@ -515,29 +183,112 @@ namespace storytor.Game.Screens
                 scale = screenSize.X / 854f;
             }
 
-            storyboardContainer.Scale = new osuTK.Vector2(scale);
+            storyboardContainer.Scale = new Vector2(scale);
+        }
+
+        private void updateSpriteAtTime(AnimatedStoryboardSprite drawable, StoryboardSprite sprite, SpriteTimelineManager timelineManager, double time)
+        {
+            // Check if sprite should be visible
+            if (!timelineManager.IsVisibleAt(time))
+            {
+                drawable.Alpha = 0f;
+                return;
+            }
+
+            // Get sprite state at current time
+            var state = timelineManager.GetStateAt(time, X_OFFSET);
+            
+            // Apply state to drawable
+            drawable.Position = state.Position;
+            drawable.Scale = state.Scale;
+            drawable.Rotation = state.Rotation;
+            drawable.Alpha = state.Alpha;
+            drawable.Colour = state.Color;
+            
+            // Apply flip transformations
+            if (state.FlipH)
+                drawable.Scale = new Vector2(-Math.Abs(drawable.Scale.X), drawable.Scale.Y);
+            if (state.FlipV)
+                drawable.Scale = new Vector2(drawable.Scale.X, -Math.Abs(drawable.Scale.Y));
+                
+            // Apply blending mode (simplified)
+            if (state.Additive)
+                drawable.Blending = BlendingParameters.Additive;
+            else
+                drawable.Blending = BlendingParameters.Mixture;
+        }
+
+        
+        /// <summary>
+        /// Updates the storyboard to a specific time (main method called from outside)
+        /// </summary>
+        public void UpdateTime(double timeMs)
+        {
+            // Update all sprites based on given time
+            foreach (var (sprite, timelineManager) in timelineManagers)
+            {
+                if (!spriteDrawables.TryGetValue(sprite, out var drawable)) continue;
+                
+                updateSpriteAtTime(drawable, sprite, timelineManager, timeMs);
+            }
+        }
+        
+        /// <summary>
+        /// Seeks the storyboard to a specific time (alias for UpdateTime)
+        /// </summary>
+        public void SeekTo(double time)
+        {
+            UpdateTime(time);
         }
 
         /// <summary>
-        /// Dispose resources including texture cache
+        /// Gets the time range where the storyboard has content
         /// </summary>
-        protected override void Dispose(bool isDisposing)
+        public (double startTime, double endTime) GetContentTimeRange()
         {
-            if (isDisposing)
+            double startTime = double.MaxValue;
+            double endTime = double.MinValue;
+
+            foreach (var timelineManager in timelineManagers.Values)
             {
-                // Dispose all cached textures
-                foreach (var texture in textureCache.Values)
-                {
-                    texture?.Dispose();
-                }
-                textureCache.Clear();
-                Console.WriteLine("🗑️ Disposed texture cache with all textures");
+                startTime = Math.Min(startTime, timelineManager.DisplayStartTime);
+                endTime = Math.Max(endTime, timelineManager.DisplayEndTime);
             }
 
+            return startTime == double.MaxValue ? (0, 0) : (startTime, endTime);
+        }
+
+        /// <summary>
+        /// Gets debug information about the storyboard state
+        /// </summary>
+        public string GetDebugInfo(double time)
+        {
+            var activeSprites = 0;
+            var visibleSprites = 0;
+
+            foreach (var (sprite, timelineManager) in timelineManagers)
+            {
+                if (timelineManager.IsActiveAt(time)) activeSprites++;
+                if (timelineManager.IsVisibleAt(time)) visibleSprites++;
+            }
+
+            var (startTime, endTime) = GetContentTimeRange();
+            
+            return $"Time: {time:F0}ms | Content: {startTime:F0}-{endTime:F0}ms | " +
+                   $"Active: {activeSprites}/{timelineManagers.Count} | Visible: {visibleSprites}";
+        }
+
+        protected override void Dispose(bool isDisposing)
+        {
             base.Dispose(isDisposing);
+            
+            // Clear caches
+            textureCache.Clear();
+            timelineManagers.Clear();
+            spriteDrawables.Clear();
         }
     }
-
+    
     /// <summary>
     /// A drawable sprite that can be animated based on storyboard commands
     /// </summary>
