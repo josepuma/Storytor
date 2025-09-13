@@ -22,7 +22,6 @@ namespace storytor.Game.Components
         public GridOverlay()
         {
             RelativeSizeAxes = Axes.Both;
-            Depth = -0.1f; // Slightly in front of storyboard, behind UI
         }
 
         protected override void LoadComplete()
@@ -47,7 +46,6 @@ namespace storytor.Game.Components
                     Anchor = Anchor.TopRight,
                     Origin = Anchor.TopRight,
                     Margin = new MarginPadding { Top = 20, Right = 20 },
-                    Depth = -0.2f, // In front of grid but behind UI
                     Masking = true,
                     CornerRadius = 8,
                     Children = new Drawable[]
@@ -249,14 +247,11 @@ namespace storytor.Game.Components
 
         public new void Show()
         {
-            Console.WriteLine("🔧 GridOverlay.Show() called");
-            Console.WriteLine($"🔧 Current Alpha: {Alpha}, Depth: {Depth}");
             this.FadeIn(200);
         }
 
         public new void Hide()
         {
-            Console.WriteLine("🔧 GridOverlay.Hide() called");
             this.FadeOut(200);
         }
     }

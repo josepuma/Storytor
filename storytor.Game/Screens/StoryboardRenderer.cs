@@ -297,9 +297,7 @@ namespace storytor.Game.Screens
 
                     case nameof(ParameterCommand):
                         // Apply active parameter commands (parameters only apply while active)
-                        var activeParameterCmds = commandsOfType.Cast<ParameterCommand>()
-                            .Where(cmd => timeMs >= cmd.StartTime && timeMs <= cmd.EndTime)
-                            .ToList();
+                        var activeParameterCmds = getActiveParameterCommands(commandsOfType.Cast<ParameterCommand>(), timeMs);
 
                         foreach (var paramCmd in activeParameterCmds)
                         {
@@ -498,6 +496,63 @@ namespace storytor.Game.Screens
             }
 
             return bestActiveCommand ?? lastCompletedCommand;
+        }
+
+        /// <summary>
+        /// Gets active parameter commands, handling persistent parameters correctly
+        /// </summary>
+        private static List<ParameterCommand> getActiveParameterCommands(IEnumerable<ParameterCommand> parameterCommands, double timeMs)
+        {
+            var paramList = parameterCommands.ToList();
+            var activeParams = new List<ParameterCommand>();
+            
+            // Group parameters by type to handle persistence correctly
+            var paramGroups = paramList.GroupBy(p => p.Parameter);
+            
+            foreach (var group in paramGroups)
+            {
+                var paramsOfType = group.OrderBy(p => p.StartTime).ToList();
+                
+                // Find the most recent parameter that has started (like other commands)
+                ParameterCommand activeParam = null;
+                
+                foreach (var param in paramsOfType)
+                {
+                    if (timeMs >= param.StartTime)
+                    {
+                        // This parameter has started - it becomes the candidate
+                        activeParam = param;
+                        
+                        // For normal parameters, check if it has ended
+                        if (param.EndTime != int.MaxValue && timeMs > param.EndTime)
+                        {
+                            // This parameter has ended, continue looking for a newer one
+                            continue;
+                        }
+                        
+                        // For persistent parameters (EndTime = int.MaxValue), they stay active until replaced
+                        // For normal parameters that haven't ended, they stay active
+                        // In both cases, this is our active parameter
+                    }
+                    else
+                    {
+                        // Future parameters haven't started yet, stop looking
+                        break;
+                    }
+                }
+                
+                // Add the active parameter if we found one
+                if (activeParam != null)
+                {
+                    // Double-check: for normal parameters, make sure we're still within the time range
+                    if (activeParam.EndTime == int.MaxValue || timeMs <= activeParam.EndTime)
+                    {
+                        activeParams.Add(activeParam);
+                    }
+                }
+            }
+            
+            return activeParams;
         }
 
         /// <summary>

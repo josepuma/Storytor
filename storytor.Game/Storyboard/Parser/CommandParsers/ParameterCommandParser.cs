@@ -47,14 +47,19 @@ namespace storytor.Game.Storyboard.Parser.CommandParsers
                     return null; // Start time is required
                 }
                 
-                // Parse end time (use start time if not provided)
-                if (parts.Length > 3 && int.TryParse(parts[3], out int endTime))
+                // Parse end time (handle empty values for persistent parameters)
+                if (parts.Length > 3 && !string.IsNullOrWhiteSpace(parts[3]) && int.TryParse(parts[3], out int endTime))
                 {
                     parameterCommand.EndTime = endTime;
                 }
+                else if (parts.Length > 3 && string.IsNullOrWhiteSpace(parts[3]))
+                {
+                    // Empty end time means persistent parameter - let renderer handle duration
+                    parameterCommand.EndTime = int.MaxValue;
+                }
                 else
                 {
-                    parameterCommand.EndTime = startTime; // Instant command
+                    parameterCommand.EndTime = startTime; // Instant command (fallback)
                 }
                 
                 // Parse parameter (required)
