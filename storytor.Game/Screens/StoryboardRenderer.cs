@@ -52,8 +52,6 @@ namespace storytor.Game.Screens
         [BackgroundDependencyLoader]
         private void load()
         {
-            Console.WriteLine($"Initializing storyboard renderer for: {basePath}");
-
             // Create drawable sprites for each storyboard sprite
             foreach (var storyboardSprite in storyboard.Sprites)
             {
@@ -71,20 +69,15 @@ namespace storytor.Game.Screens
                     Console.WriteLine($"Failed to create drawable for sprite {storyboardSprite.ImagePath}: {ex.Message}");
                 }
             }
-
-            Console.WriteLine($"Created {spriteDrawables.Count} drawable sprites");
         }
 
         private AnimatedStoryboardSprite createDrawableSprite(StoryboardSprite storyboardSprite)
         {
-            //Console.WriteLine($"Creating sprite for: '{storyboardSprite.ImagePath}'");
-
             // Clean and normalize the image path
             var cleanImagePath = storyboardSprite.ImagePath?.Trim().Trim('"') ?? "";
 
             if (string.IsNullOrEmpty(cleanImagePath))
             {
-                Console.WriteLine("ERROR: Empty image path for sprite!");
                 return null;
             }
 
@@ -102,42 +95,15 @@ namespace storytor.Game.Screens
             string foundPath = null;
             foreach (var path in possiblePaths)
             {
-                //Console.WriteLine($"Trying path: {path}");
                 if (File.Exists(path))
                 {
                     foundPath = path;
-                    //Console.WriteLine($"✅ Found image at: {path}");
                     break;
                 }
             }
 
             if (foundPath == null)
             {
-                Console.WriteLine($"❌ Image not found anywhere. Searched:");
-                foreach (var path in possiblePaths)
-                {
-                    Console.WriteLine($"   - {path}");
-                }
-
-                // List files in the base directory for debugging
-                Console.WriteLine($"Files in base directory ({basePath}):");
-                try
-                {
-                    var files = Directory.GetFiles(basePath, "*.*", SearchOption.AllDirectories);
-                    foreach (var file in files.Take(10)) // Show first 10 files
-                    {
-                        //Console.WriteLine($"   - {Path.GetRelativePath(basePath, file)}");
-                    }
-                    if (files.Length > 10)
-                    {
-                       //Console.WriteLine($"   ... and {files.Length - 10} more files");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"   Error listing files: {ex.Message}");
-                }
-
                 return null;
             }
 
@@ -146,25 +112,9 @@ namespace storytor.Game.Screens
                 // Load texture directly from file using framework texture creation
                 Texture texture = null;
 
-                // Method 1: Try to load with osu!framework's Texture.FromStream
-                try
-                {
-                    using var stream = File.OpenRead(foundPath);
-                    texture = Texture.FromStream(host.Renderer, stream);
-                    //Console.WriteLine($"✅ Loaded texture using Texture.FromStream: {foundPath}");
-                }
-                catch (Exception streamEx)
-                {
-                    Console.WriteLine($"Texture.FromStream failed: {streamEx.Message}");
-                }
-
-                if (texture == null)
-                {
-                    Console.WriteLine($"❌ All texture loading methods failed for: {foundPath}");
-                    return null;
-                }
-
-                //Console.WriteLine($"✅ Successfully loaded texture: {foundPath}");
+                // Load texture using osu!framework's Texture.FromStream
+                using var stream = File.OpenRead(foundPath);
+                texture = Texture.FromStream(host.Renderer, stream);
 
                 // Create animated sprite with adjusted coordinates for 16:9 container
                 // osu! coordinates are based on 640x480, but we use 854x480
@@ -184,10 +134,8 @@ namespace storytor.Game.Screens
 
                 return drawable;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.WriteLine($"❌ Error loading sprite {foundPath}: {ex.Message}");
-                Console.WriteLine($"Exception details: {ex}");
                 return null;
             }
         }
@@ -200,10 +148,6 @@ namespace storytor.Game.Screens
         {
             // Update all sprite animations
             updateCounter++;
-            if (updateCounter % 60 == 0) // Log every 60 frames (~1 second)
-            {
-                //Console.WriteLine($"UpdateTime: {timeMs}ms, {spriteDrawables.Count} sprites");
-            }
 
             foreach (var (storyboardSprite, drawable) in spriteDrawables)
             {
@@ -218,19 +162,10 @@ namespace storytor.Game.Screens
             // Check if sprite should be visible at this time
             var (start, end) = getSpriteLifetime(storyboardSprite);
 
-            if (storyboardSprite.ImagePath.Contains("light1"))
-            {
-                //Console.WriteLine($"Sprite {storyboardSprite.ImagePath}: time={timeMs}, lifetime=({start}-{end}), commands={storyboardSprite.Commands.Count}");
-            }
-
             if (timeMs < start || timeMs > end)
             {
                 // Outside sprite lifetime - make invisible
                 drawable.Alpha = 0;
-                if (storyboardSprite.ImagePath.Contains("light1"))
-                {
-                    //Console.WriteLine($"  -> Making {storyboardSprite.ImagePath} invisible (outside lifetime)");
-                }
                 return;
             }
 
@@ -387,7 +322,6 @@ namespace storytor.Game.Screens
                         break;
 
                     default:
-                        Console.WriteLine($"Unknown command type: {commandGroup.Key.Name}");
                         break;
                 }
             }

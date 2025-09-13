@@ -78,27 +78,19 @@ namespace storytor.Game.Storyboard.Parser
                     // Check if this is a loop command
                     if (LoopCommandParser.IsLoopCommand(trimmedLine))
                     {
-                        if (currentSprite?.ImagePath?.Contains("background.png") == true)
-                            Console.WriteLine($"🔄 Parsing Loop: {trimmedLine}");
                         // Parse loop command
                         currentLoop = LoopCommandParser.ParseLoopCommand(trimmedLine);
                         if (currentLoop != null)
                         {
-                            if (currentSprite?.ImagePath?.Contains("background.png") == true)
-                                Console.WriteLine($"✅ Loop parsed: StartTime={currentLoop.StartTime}, LoopCount={currentLoop.LoopCount}");
                             currentSprite.Commands.Add(currentLoop);
                         }
                     }
                     else if (currentLoop != null && lines[i].StartsWith("  "))
                     {
-                        if (currentSprite?.ImagePath?.Contains("background.png") == true)
-                            Console.WriteLine($"📝 Loop nested command: {trimmedLine}");
                         // We're inside a loop and the line is indented, parse nested commands
                         var command = parseCommand(trimmedLine);
                         if (command != null)
                         {
-                            if (currentSprite?.ImagePath?.Contains("background.png") == true)
-                                Console.WriteLine($"✅ Added to loop: {command.GetType().Name}, StartTime={command.StartTime}, EndTime={command.EndTime}");
                             currentLoop.LoopCommands.Add(command);
                             
                             // Update loop end time based on nested commands
@@ -112,16 +104,12 @@ namespace storytor.Game.Storyboard.Parser
                     else
                     {
                         // Not indented or not in a loop - this closes any current loop
-                        if (currentLoop != null && currentSprite?.ImagePath?.Contains("background.png") == true)
-                            Console.WriteLine($"🔚 Closing loop due to non-indented line: {trimmedLine}");
                         currentLoop = null;
                         
                         // Regular command for the current sprite
                         var command = parseCommand(trimmedLine);
                         if (command != null)
                         {
-                            if (currentSprite?.ImagePath?.Contains("background.png") == true)
-                                Console.WriteLine($"➕ Regular command: {command.GetType().Name}, StartTime={command.StartTime}, EndTime={command.EndTime}");
                             currentSprite.Commands.Add(command);
                         }
                     }
