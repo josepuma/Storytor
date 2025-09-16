@@ -37,7 +37,28 @@ namespace storytor.Game.Storyboard.Models
         /// Initial Y position of the sprite
         /// </summary>
         public float Y { get; set; }
-        
+
+        /// <summary>
+        /// Indicates if this is an animation sprite
+        /// </summary>
+        public bool IsAnimation { get; set; }
+
+        /// <summary>
+        /// Number of frames in the animation (animations only)
+        /// </summary>
+        public int FrameCount { get; set; }
+
+        /// <summary>
+        /// Delay in milliseconds between each frame (animations only)
+        /// </summary>
+        public double FrameDelay { get; set; }
+
+        /// <summary>
+        /// Loop type for the animation (animations only)
+        /// LoopForever, LoopOnce
+        /// </summary>
+        public string LoopType { get; set; } = "LoopForever";
+
         /// <summary>
         /// List of commands applied to this sprite
         /// </summary>

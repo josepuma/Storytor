@@ -94,42 +94,35 @@ namespace storytor.Game.Screens
                 return null;
             }
 
-            // Try different path combinations like the original
-            var possiblePaths = new[]
-            {
-                Path.Combine(basePath, cleanImagePath.Replace('\\', '/')),
-                Path.Combine(basePath, cleanImagePath.Replace('/', '\\')),
-                Path.Combine(basePath, Path.GetFileName(cleanImagePath)),
-                Path.Combine(basePath, "sb", cleanImagePath.Replace('\\', '/')),
-                Path.Combine(basePath, "SB", cleanImagePath.Replace('\\', '/')),
-                cleanImagePath // Try absolute path
-            };
-
-            string foundPath = null;
-            foreach (var path in possiblePaths)
-            {
-                if (File.Exists(path))
-                {
-                    foundPath = path;
-                    break;
-                }
-            }
-
-            if (foundPath == null)
-            {
-                return null;
-            }
-
             try
             {
-                // Use texture cache to avoid loading the same texture multiple times
-                var texture = getOrLoadTexture(foundPath);
+                Texture texture = null;
+                Texture[] animationFrames = null;
+
+                if (sprite.IsAnimation)
+                {
+                    // Load animation frames
+                    animationFrames = loadAnimationFrames(cleanImagePath, sprite.FrameCount);
+                    if (animationFrames == null || animationFrames.Length == 0)
+                        return null;
+                    texture = animationFrames[0];
+                }
+                else
+                {
+                    // Load single texture
+                    var foundPath = findImageFile(cleanImagePath);
+                    if (foundPath == null)
+                        return null;
+                    texture = getOrLoadTexture(foundPath);
+                    if (texture == null)
+                        return null;
+                }
 
                 // Calculate offset based on widescreen setting
                 float currentOffset = (beatmap?.WidescreenStoryboard ?? true) ? xoffset : 0;
                 var adjustedX = sprite.X + currentOffset;
 
-                var drawable = new AnimatedStoryboardSprite(sprite, texture)
+                var drawable = new AnimatedStoryboardSprite(sprite, texture, animationFrames)
                 {
                     Position = new Vector2(adjustedX, sprite.Y),
                     Origin = sprite.Origin,
@@ -142,6 +135,70 @@ namespace storytor.Game.Screens
             {
                 return null;
             }
+        }
+
+        private string findImageFile(string imagePath)
+        {
+            // Try different path combinations
+            var possiblePaths = new[]
+            {
+                Path.Combine(basePath, imagePath.Replace('\\', '/')),
+                Path.Combine(basePath, imagePath.Replace('/', '\\')),
+                Path.Combine(basePath, Path.GetFileName(imagePath)),
+                Path.Combine(basePath, "sb", imagePath.Replace('\\', '/')),
+                Path.Combine(basePath, "SB", imagePath.Replace('\\', '/')),
+                imagePath // Try absolute path
+            };
+
+            foreach (var path in possiblePaths)
+            {
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+            }
+
+            return null;
+        }
+
+        private Texture[] loadAnimationFrames(string baseImagePath, int frameCount)
+        {
+            var frames = new List<Texture>();
+            var extension = Path.GetExtension(baseImagePath);
+            var nameWithoutExtension = Path.GetFileNameWithoutExtension(baseImagePath);
+            var directory = Path.GetDirectoryName(baseImagePath) ?? "";
+
+            Console.WriteLine($"🎞️ Loading animation frames for: {nameWithoutExtension} ({frameCount} frames)");
+
+            for (int i = 0; i < frameCount; i++)
+            {
+                var frameName = $"{nameWithoutExtension}{i}{extension}";
+                var framePath = string.IsNullOrEmpty(directory) ? frameName : Path.Combine(directory, frameName);
+
+                var foundPath = findImageFile(framePath);
+                if (foundPath != null)
+                {
+                    var frameTexture = getOrLoadTexture(foundPath);
+                    if (frameTexture != null)
+                    {
+                        frames.Add(frameTexture);
+                        Console.WriteLine($"  ✅ Frame {i}: {Path.GetFileName(foundPath)}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"  ❌ Failed to load frame {i}: {framePath}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"  ⚠️ Frame {i} not found: {framePath}");
+                }
+            }
+
+            Console.WriteLine($"📊 Animation loading result: {frames.Count}/{frameCount} frames loaded");
+
+            // Return frames even if not all were found, but at least one exists
+            return frames.Count > 0 ? frames.ToArray() : null;
         }
 
         private Texture getOrLoadTexture(string imagePath)
@@ -195,6 +252,12 @@ namespace storytor.Game.Screens
             {
                 drawable.Alpha = 0f;
                 return;
+            }
+
+            // Update animation frame if this is an animation
+            if (sprite.IsAnimation)
+            {
+                drawable.UpdateAnimation(time);
             }
 
             // Get sprite state at current time with dynamic offset
@@ -297,19 +360,84 @@ namespace storytor.Game.Screens
     public partial class AnimatedStoryboardSprite : Sprite
     {
         public StoryboardSprite StoryboardData { get; }
+        private readonly Texture[] animationFrames;
+        private readonly bool isAnimation;
+        private double animationStartTime;
+        private int currentFrame;
 
-        public AnimatedStoryboardSprite(StoryboardSprite storyboardData, Texture texture)
+        public AnimatedStoryboardSprite(StoryboardSprite storyboardData, Texture texture, Texture[] frames = null)
         {
             StoryboardData = storyboardData;
-            Texture = texture;
+            isAnimation = storyboardData.IsAnimation && frames != null && frames.Length > 0;
 
-            // Set initial properties
-            Name = $"Sprite: {storyboardData.DisplayName}";
+            if (isAnimation)
+            {
+                animationFrames = frames;
+                Texture = frames[0]; // Start with first frame
+                currentFrame = 0;
+                Name = $"Animation: {storyboardData.DisplayName}";
+            }
+            else
+            {
+                Texture = texture;
+                Name = $"Sprite: {storyboardData.DisplayName}";
+            }
+        }
+
+        /// <summary>
+        /// Updates the animation frame based on current time
+        /// </summary>
+        public void UpdateAnimation(double currentTime)
+        {
+            if (!isAnimation || animationFrames == null || animationFrames.Length == 0) return;
+
+            if (animationStartTime == 0)
+                animationStartTime = currentTime;
+
+            var elapsed = currentTime - animationStartTime;
+            var frameIndex = (int)(elapsed / StoryboardData.FrameDelay);
+
+            // Use actual loaded frames count, not the theoretical count
+            var actualFrameCount = animationFrames.Length;
+
+            if (StoryboardData.LoopType == "LoopOnce")
+            {
+                // Play once and stop on last frame
+                frameIndex = Math.Min(frameIndex, actualFrameCount - 1);
+            }
+            else
+            {
+                // Loop forever
+                frameIndex %= actualFrameCount;
+            }
+
+            // Double check bounds before accessing array
+            if (frameIndex != currentFrame && frameIndex >= 0 && frameIndex < animationFrames.Length)
+            {
+                currentFrame = frameIndex;
+                Texture = animationFrames[frameIndex];
+            }
+        }
+
+        /// <summary>
+        /// Resets the animation to start from the beginning
+        /// </summary>
+        public void ResetAnimation(double startTime)
+        {
+            if (!isAnimation) return;
+
+            animationStartTime = startTime;
+            currentFrame = 0;
+            if (animationFrames?.Length > 0)
+                Texture = animationFrames[0];
         }
 
         public override string ToString()
         {
-            return $"AnimatedSprite: {StoryboardData.DisplayName} at ({Position.X}, {Position.Y})";
+            if (isAnimation)
+                return $"Animation: {StoryboardData.DisplayName} (frame {currentFrame}/{StoryboardData.FrameCount}) at ({Position.X}, {Position.Y})";
+            else
+                return $"Sprite: {StoryboardData.DisplayName} at ({Position.X}, {Position.Y})";
         }
     }
 }
