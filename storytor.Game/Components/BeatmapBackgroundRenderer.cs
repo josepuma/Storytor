@@ -51,31 +51,15 @@ namespace storytor.Game.Components
             if (storyboard == null || string.IsNullOrEmpty(beatmap.BackgroundImage))
                 return;
 
-            // Check if background image is used in storyboard
             var backgroundFilename = beatmap.BackgroundImage;
 
-            foreach (var sprite in storyboard.Sprites)
-            {
-                if (sprite.ImagePath.Equals(backgroundFilename, StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.WriteLine($"🚫 Background disabled: {backgroundFilename} is used in storyboard");
-                    isBackgroundDisabled = true;
-                    return;
-                }
-            }
-
-            // Check for explicit background disable in storyboard
-            // Look for: Sprite,Background,TopLeft,"background.jpg",0,0
+            // Check if the beatmap's background image is used in ANY sprite in the Background layer
             foreach (var sprite in storyboard.Sprites)
             {
                 if (sprite.Layer == "Background" &&
-                    sprite.ImagePath.Equals(backgroundFilename, StringComparison.OrdinalIgnoreCase) &&
-                    sprite.Origin == Anchor.TopLeft &&
-                    sprite.X == 0 &&
-                    sprite.Y == 0 &&
-                    sprite.Commands.Count == 0)
+                    sprite.ImagePath.Equals(backgroundFilename, StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine($"🚫 Background disabled: Found explicit disable command for {backgroundFilename}");
+                    Console.WriteLine($"🚫 Background disabled: Beatmap background '{backgroundFilename}' is used in Background layer");
                     isBackgroundDisabled = true;
                     return;
                 }
@@ -111,7 +95,7 @@ namespace storytor.Game.Components
 
                 // Calculate scale based on osu! widescreen setting
                 // Widescreen: 854 / bg.width, Standard: 640 / bg.width
-                float targetWidth = beatmap.WidescreenStoryboard ? 854f : 1024f;
+                float targetWidth = beatmap.WidescreenStoryboard ? 1366f : 1024f;
                 float scale = targetWidth / texture.Width;
 
                 Console.WriteLine($"📐 Scale calculation:");

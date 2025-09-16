@@ -50,19 +50,20 @@ namespace storytor.Game.Screens
             // osu! always uses 854x480 coordinate system internally, regardless of widescreen setting
             // The widescreen setting affects how content is displayed, not the coordinate system
             Console.WriteLine($"🎭 Creating storyboard container: {widescreenwidth}x{storyboardheight} (standard osu! coordinates)");
-
+            float containerWidth = (beatmap?.WidescreenStoryboard ?? true) ? widescreenwidth : standardwidth;
             // Create storyboard coordinate container using standard osu! dimensions
             storyboardContainer = new Container
             {
-                Size = new Vector2(widescreenwidth, storyboardheight),
+                Size = new Vector2(containerWidth, storyboardheight),
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
-                Name = "StoryboardContainer"
+                Name = "StoryboardContainer",
+                Masking = true
             };
 
             Add(storyboardContainer);
 
-            Console.WriteLine($"✅ Storyboard container created - {widescreenwidth}x{storyboardheight} (restored original system)");
+            Console.WriteLine($"✅ Storyboard container created - {containerWidth}x{storyboardheight} with masking (widescreen: {beatmap?.WidescreenStoryboard ?? true})");
         }
 
         [BackgroundDependencyLoader]
@@ -124,8 +125,9 @@ namespace storytor.Game.Screens
                 // Use texture cache to avoid loading the same texture multiple times
                 var texture = getOrLoadTexture(foundPath);
 
-                // Create animated sprite with adjusted coordinates for 16:9 container
-                var adjustedX = sprite.X + xoffset;
+                // Calculate offset based on widescreen setting
+                float currentOffset = (beatmap?.WidescreenStoryboard ?? true) ? xoffset : 0;
+                var adjustedX = sprite.X + currentOffset;
 
                 var drawable = new AnimatedStoryboardSprite(sprite, texture)
                 {
@@ -195,8 +197,9 @@ namespace storytor.Game.Screens
                 return;
             }
 
-            // Get sprite state at current time
-            var state = timelineManager.GetStateAt(time, xoffset);
+            // Get sprite state at current time with dynamic offset
+            float currentOffset = (beatmap?.WidescreenStoryboard ?? true) ? xoffset : 0;
+            var state = timelineManager.GetStateAt(time, currentOffset);
 
             // Apply state to drawable
             drawable.Position = state.Position;
