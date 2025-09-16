@@ -10,6 +10,8 @@ using osu.Framework.Platform;
 using osuTK;
 using storytor.Game.Storyboard.Models;
 using storytor.Game.Storyboard.Rendering;
+using storytor.Game.Services;
+using storytor.Game.Beatmap.Models;
 
 namespace storytor.Game.Screens
 {
@@ -20,35 +22,47 @@ namespace storytor.Game.Screens
     {
         private readonly StoryboardData storyboard;
         private readonly string basePath;
+        private readonly BeatmapData beatmap;
         private readonly Dictionary<StoryboardSprite, SpriteTimelineManager> timelineManagers = new();
         private readonly Dictionary<StoryboardSprite, AnimatedStoryboardSprite> spriteDrawables = new();
-        private readonly Dictionary<string, Texture> textureCache = new();
-        
         [Resolved]
         private GameHost host { get; set; } = null!;
-        
-        private Container storyboardContainer;
-        private const float STORYBOARD_WIDTH = 854f;
-        private const float STORYBOARD_HEIGHT = 480f;
-        private const float X_OFFSET = (STORYBOARD_WIDTH - 640f) / 2f;
 
-        public StoryboardRenderer(StoryboardData storyboard, string basePath)
+        private Container storyboardContainer;
+        private const float widescreenwidth = 854f;
+        private const float standardwidth = 640f;
+        private const float storyboardheight = 480f;
+        private const float xoffset = (widescreenwidth - standardwidth) / 2f;
+
+        public StoryboardRenderer(StoryboardData storyboard, string basePath, BeatmapData beatmap = null)
         {
             this.storyboard = storyboard;
             this.basePath = basePath;
-            
+            this.beatmap = beatmap;
+
             RelativeSizeAxes = Axes.Both;
-            
-            // Create storyboard coordinate container
+
+            createStoryboardContainers();
+        }
+
+        private void createStoryboardContainers()
+        {
+            // osu! always uses 854x480 coordinate system internally, regardless of widescreen setting
+            // The widescreen setting affects how content is displayed, not the coordinate system
+            Console.WriteLine($"🎭 Creating storyboard container: {widescreenwidth}x{storyboardheight} (standard osu! coordinates)");
+
+            // Create storyboard coordinate container using standard osu! dimensions
             storyboardContainer = new Container
             {
-                Size = new Vector2(STORYBOARD_WIDTH, STORYBOARD_HEIGHT),
+                Size = new Vector2(widescreenwidth, storyboardheight),
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
                 Name = "StoryboardContainer"
             };
-            
+
             Add(storyboardContainer);
+
+            Console.WriteLine($"✅ Storyboard container created - {widescreenwidth}x{storyboardheight} (restored original system)");
         }
 
         [BackgroundDependencyLoader]
@@ -58,7 +72,7 @@ namespace storytor.Game.Screens
             foreach (var sprite in storyboard.Sprites)
             {
                 timelineManagers[sprite] = new SpriteTimelineManager(sprite);
-                
+
                 // Create drawable sprite
                 var drawable = createSpriteDrawable(sprite);
                 if (drawable != null)
@@ -73,12 +87,12 @@ namespace storytor.Game.Screens
         {
             // Clean and normalize the image path
             var cleanImagePath = sprite.ImagePath?.Trim().Trim('"') ?? "";
-            
+
             if (string.IsNullOrEmpty(cleanImagePath))
             {
                 return null;
             }
-            
+
             // Try different path combinations like the original
             var possiblePaths = new[]
             {
@@ -89,7 +103,7 @@ namespace storytor.Game.Screens
                 Path.Combine(basePath, "SB", cleanImagePath.Replace('\\', '/')),
                 cleanImagePath // Try absolute path
             };
-            
+
             string foundPath = null;
             foreach (var path in possiblePaths)
             {
@@ -99,27 +113,27 @@ namespace storytor.Game.Screens
                     break;
                 }
             }
-            
+
             if (foundPath == null)
             {
                 return null;
             }
-            
+
             try
             {
                 // Use texture cache to avoid loading the same texture multiple times
                 var texture = getOrLoadTexture(foundPath);
-                
+
                 // Create animated sprite with adjusted coordinates for 16:9 container
-                var adjustedX = sprite.X + X_OFFSET;
-                
+                var adjustedX = sprite.X + xoffset;
+
                 var drawable = new AnimatedStoryboardSprite(sprite, texture)
                 {
                     Position = new Vector2(adjustedX, sprite.Y),
                     Origin = sprite.Origin,
                     Alpha = 0 // Start invisible, will be controlled by timeline
                 };
-                
+
                 return drawable;
             }
             catch (Exception)
@@ -130,22 +144,8 @@ namespace storytor.Game.Screens
 
         private Texture getOrLoadTexture(string imagePath)
         {
-            // Use the full path as cache key
-            if (textureCache.TryGetValue(imagePath, out var cachedTexture))
-                return cachedTexture;
-
-            try
-            {
-                using var stream = File.OpenRead(imagePath);
-                var texture = Texture.FromStream(host.Renderer, stream);
-                textureCache[imagePath] = texture;
-                return texture;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to load texture {imagePath}: {ex.Message}");
-                return null;
-            }
+            // Use shared texture cache service
+            return TextureCacheService.Instance.GetOrLoadTexture(imagePath);
         }
 
         private Anchor convertOriginToAnchor(Anchor origin)
@@ -157,11 +157,11 @@ namespace storytor.Game.Screens
         protected override void Update()
         {
             base.Update();
-            
+
             // Update container scale to maintain aspect ratio while fitting screen
             updateContainerScale();
         }
-        
+
         private void updateContainerScale()
         {
             if (storyboardContainer == null) return;
@@ -196,21 +196,21 @@ namespace storytor.Game.Screens
             }
 
             // Get sprite state at current time
-            var state = timelineManager.GetStateAt(time, X_OFFSET);
-            
+            var state = timelineManager.GetStateAt(time, xoffset);
+
             // Apply state to drawable
             drawable.Position = state.Position;
             drawable.Scale = state.Scale;
             drawable.Rotation = state.Rotation;
             drawable.Alpha = state.Alpha;
             drawable.Colour = state.Color;
-            
+
             // Apply flip transformations
             if (state.FlipH)
                 drawable.Scale = new Vector2(-Math.Abs(drawable.Scale.X), drawable.Scale.Y);
             if (state.FlipV)
                 drawable.Scale = new Vector2(drawable.Scale.X, -Math.Abs(drawable.Scale.Y));
-                
+
             // Apply blending mode (simplified)
             if (state.Additive)
                 drawable.Blending = BlendingParameters.Additive;
@@ -218,7 +218,7 @@ namespace storytor.Game.Screens
                 drawable.Blending = BlendingParameters.Mixture;
         }
 
-        
+
         /// <summary>
         /// Updates the storyboard to a specific time (main method called from outside)
         /// </summary>
@@ -228,11 +228,11 @@ namespace storytor.Game.Screens
             foreach (var (sprite, timelineManager) in timelineManagers)
             {
                 if (!spriteDrawables.TryGetValue(sprite, out var drawable)) continue;
-                
+
                 updateSpriteAtTime(drawable, sprite, timelineManager, timeMs);
             }
         }
-        
+
         /// <summary>
         /// Seeks the storyboard to a specific time (alias for UpdateTime)
         /// </summary>
@@ -273,22 +273,21 @@ namespace storytor.Game.Screens
             }
 
             var (startTime, endTime) = GetContentTimeRange();
-            
+
             return $"Time: {time:F0}ms | Content: {startTime:F0}-{endTime:F0}ms | " +
-                   $"Active: {activeSprites}/{timelineManagers.Count} | Visible: {visibleSprites}";
+                    $"Active: {activeSprites}/{timelineManagers.Count} | Visible: {visibleSprites}";
         }
 
         protected override void Dispose(bool isDisposing)
         {
             base.Dispose(isDisposing);
-            
-            // Clear caches
-            textureCache.Clear();
+
+            // Clear caches (texture cache is now managed globally)
             timelineManagers.Clear();
             spriteDrawables.Clear();
         }
     }
-    
+
     /// <summary>
     /// A drawable sprite that can be animated based on storyboard commands
     /// </summary>

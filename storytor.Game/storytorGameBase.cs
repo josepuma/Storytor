@@ -2,8 +2,10 @@ using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.IO.Stores;
+using osu.Framework.Platform;
 using osuTK;
 using storytor.Resources;
+using storytor.Game.Services;
 
 namespace storytor.Game
 {
@@ -29,6 +31,9 @@ namespace storytor.Game
         private void load()
         {
             Resources.AddStore(new DllResourceStore(typeof(storytorResources).Assembly));
+
+            // Initialize global texture cache service
+            TextureCacheService.Initialize(Host);
         }
     }
 }

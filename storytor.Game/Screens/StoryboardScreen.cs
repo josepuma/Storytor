@@ -19,6 +19,8 @@ using osuTK.Input;
 using storytor.Game.Storyboard;
 using storytor.Game.Storyboard.Models;
 using storytor.Game.Components;
+using storytor.Game.Beatmap.Parser;
+using storytor.Game.Beatmap.Models;
 
 namespace storytor.Game.Screens
 {
@@ -37,7 +39,9 @@ namespace storytor.Game.Screens
 
         private Track currentTrack;
         private StoryboardData currentStoryboard;
+        private BeatmapData currentBeatmap;
         private StoryboardRenderer storyboardRenderer;
+        private BeatmapBackgroundRenderer backgroundRenderer;
         private TimelineComponent timeline;
         private GridOverlay gridOverlay;
         private ToggleSwitch gridToggle;
@@ -58,8 +62,8 @@ namespace storytor.Game.Screens
                 storyboardContainer = new Container
                 {
                     RelativeSizeAxes = Axes.Both,
-                    Children = new Drawable[]
-                    {
+                    Children =
+                    [
                         new FillFlowContainer
                         {
                             AutoSizeAxes = Axes.Both,
@@ -87,7 +91,7 @@ namespace storytor.Game.Screens
                                 }
                             }
                         }
-                    }
+                    ]
                 },
 
                 // Grid overlay (on top of storyboard, behind UI)
@@ -110,8 +114,8 @@ namespace storytor.Game.Screens
                             RelativeSizeAxes = Axes.X,
                             Direction = FillDirection.Horizontal,
                             Spacing = new osuTK.Vector2(10, 0),
-                            Children = new Drawable[]
-                            {
+                            Children =
+                            [
                                 loadButton = new BasicButton
                                 {
                                     Text = "Select Beatmap Folder",
@@ -132,8 +136,8 @@ namespace storytor.Game.Screens
                                 {
                                     AutoSizeAxes = Axes.Both,
                                     Margin = new MarginPadding { Left = 20 },
-                                    Children = new Drawable[]
-                                    {
+                                    Children =
+                                    [
                                         new SpriteText
                                         {
                                             Text = "Grid:",
@@ -149,9 +153,9 @@ namespace storytor.Game.Screens
                                             Origin = Anchor.CentreLeft,
                                             X = 35
                                         }
-                                    }
+                                    ]
                                 }
-                            }
+                            ]
                         },
 
                         // Status text at bottom (moved up for timeline)
@@ -234,23 +238,44 @@ namespace storytor.Game.Screens
 
         private void cleanupCurrentContent()
         {
+            Console.WriteLine("🧹 Cleaning up current content...");
+
             // Stop and dispose current track
             if (currentTrack != null)
             {
+                Console.WriteLine("   - Stopping and disposing track");
                 currentTrack.Stop();
                 currentTrack.Dispose();
                 currentTrack = null;
             }
 
-            // Clear current storyboard
-            currentStoryboard = null;
+            // Clear timeline
+            if (timeline != null)
+            {
+                Console.WriteLine("   - Clearing timeline");
+                timeline.OnSeek -= seekToTime;
+            }
 
             // Clear storyboard renderer
             if (storyboardRenderer != null)
             {
+                Console.WriteLine("   - Disposing storyboard renderer");
                 storyboardContainer.Remove(storyboardRenderer, true);
                 storyboardRenderer = null;
             }
+
+            // Clear background renderer
+            if (backgroundRenderer != null)
+            {
+                Console.WriteLine("   - Disposing background renderer");
+                storyboardContainer.Remove(backgroundRenderer, true);
+                backgroundRenderer = null;
+            }
+
+            // Clear current storyboard and beatmap data
+            Console.WriteLine("   - Clearing beatmap and storyboard data");
+            currentStoryboard = null;
+            currentBeatmap = null;
 
             // Reset UI state
             playPauseButton.Alpha = 0.5f; // Disable play button
@@ -259,12 +284,14 @@ namespace storytor.Game.Screens
             storyboardContainer.Clear();
             storyboardContainer.Add(new SpriteText
             {
-                Text = "Loading new storyboard...",
+                Text = "Loading new beatmap...",
                 Anchor = Anchor.Centre,
                 Origin = Anchor.Centre,
                 Font = FontUsage.Default.With(size: 18),
                 Colour = Colour4.White.Opacity(0.7f)
             });
+
+            Console.WriteLine("✅ Cleanup completed");
         }
 
         private async Task<string> showFolderPickerAsync()
@@ -396,52 +423,66 @@ namespace storytor.Game.Screens
         {
             try
             {
+                Console.WriteLine($"\n🎵 === LOADING NEW BEATMAP FOLDER ===");
+                Console.WriteLine($"📁 Folder path: {folderPath}");
+
                 statusText.Text = "Loading beatmap folder...";
                 loadButton.Enabled.Value = false;
 
                 Console.WriteLine($"AudioManager available: {audioManager != null}");
                 Console.WriteLine($"TrackStore available: {audioManager?.GetTrackStore() != null}");
 
-                // Find audio files (try multiple formats)
-                Console.WriteLine($"Scanning folder: {folderPath}");
-
-                var mp3Files = Directory.GetFiles(folderPath, "*.mp3");
-                var oggFiles = Directory.GetFiles(folderPath, "*.ogg");
-                var wavFiles = Directory.GetFiles(folderPath, "*.wav");
-                var m4aFiles = Directory.GetFiles(folderPath, "*.m4a");
-
-                Console.WriteLine($"Found: {mp3Files.Length} mp3, {oggFiles.Length} ogg, {wavFiles.Length} wav, {m4aFiles.Length} m4a");
-
-                var audioFiles = mp3Files
-                    .Concat(oggFiles)
-                    .Concat(wavFiles)
-                    .Concat(m4aFiles)
-                    .ToArray();
-
-                if (audioFiles.Length == 0)
+                // Verify folder exists and list contents
+                if (!Directory.Exists(folderPath))
                 {
-                    statusText.Text = "No audio files found in folder!";
+                    Console.WriteLine($"❌ Folder does not exist: {folderPath}");
+                    statusText.Text = "Selected folder does not exist!";
                     return;
                 }
 
-                // Find OSB file (optional for now)
-                var osbFiles = Directory.GetFiles(folderPath, "*.osb");
+                var allFiles = Directory.GetFiles(folderPath);
+                var osuFiles = allFiles.Where(f => f.EndsWith(".osu", StringComparison.OrdinalIgnoreCase)).ToArray();
+                Console.WriteLine($"📄 Found {allFiles.Length} total files, {osuFiles.Length} .osu files");
 
-                // Load audio
-                var audioFile = audioFiles.First();
-                statusText.Text = $"Loading audio: {Path.GetFileName(audioFile)}";
+                foreach (var osuFile in osuFiles)
+                {
+                    Console.WriteLine($"   📋 {Path.GetFileName(osuFile)}");
+                }
+
+                // Parse .osu files to get beatmap information
+                statusText.Text = "Parsing .osu files...";
+                currentBeatmap = OsuFileParser.FindBestBeatmap(folderPath);
+
+                if (currentBeatmap == null)
+                {
+                    statusText.Text = "No .osu files found in folder!";
+                    return;
+                }
+
+                Console.WriteLine($"Found beatmap: {currentBeatmap}");
+                Console.WriteLine($"Audio file: {currentBeatmap.AudioFilename}");
+                Console.WriteLine($"Background: {currentBeatmap.BackgroundImage}");
+
+                // Load audio from beatmap data
+                if (string.IsNullOrEmpty(currentBeatmap.AudioFilename))
+                {
+                    statusText.Text = "No audio file specified in beatmap!";
+                    return;
+                }
+
+                var audioFile = currentBeatmap.GetFullAudioPath();
+                if (!File.Exists(audioFile))
+                {
+                    statusText.Text = $"Audio file not found: {currentBeatmap.AudioFilename}";
+                    return;
+                }
+
+                statusText.Text = $"Loading audio: {currentBeatmap.AudioFilename}";
 
                 try
                 {
-                    // Check if file exists and is readable
-                    if (!File.Exists(audioFile))
-                    {
-                        statusText.Text = $"Audio file not found: {audioFile}";
-                        return;
-                    }
-
                     var fileInfo = new FileInfo(audioFile);
-                    statusText.Text = $"Audio file size: {fileInfo.Length / 1024} KB";
+                    Console.WriteLine($"Audio file size: {fileInfo.Length / 1024} KB");
 
                     // Create a custom track store for this specific folder
                     statusText.Text = "Creating custom track store...";
@@ -450,11 +491,8 @@ namespace storytor.Game.Screens
                     var folderResourceStore = new StorageBackedResourceStore(host.GetStorage(folderPath));
                     var customTrackStore = audioManager.GetTrackStore(folderResourceStore);
 
-                    // Get just the filename for the custom track store
-                    var audioFileName = Path.GetFileName(audioFile);
-
-                    Console.WriteLine($"Loading audio file: {audioFileName} from custom track store");
-                    currentTrack = customTrackStore.Get(audioFileName);
+                    Console.WriteLine($"Loading audio file: {currentBeatmap.AudioFilename} from custom track store");
+                    currentTrack = customTrackStore.Get(currentBeatmap.AudioFilename);
 
                     // Setup timeline with track
                     if (currentTrack != null)
@@ -465,7 +503,7 @@ namespace storytor.Game.Screens
 
                     if (currentTrack == null)
                     {
-                        statusText.Text = $"Failed to load: {audioFileName}. Trying fallback method...";
+                        statusText.Text = $"Failed to load: {currentBeatmap.AudioFilename}. Trying fallback method...";
 
                         // Fallback: Try copying to Resources/Tracks/ temporarily
                         try
@@ -473,7 +511,7 @@ namespace storytor.Game.Screens
                             var resourcesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "Tracks");
                             Directory.CreateDirectory(resourcesPath);
 
-                            var tempFileName = $"temp_{Guid.NewGuid()}.mp3";
+                            var tempFileName = $"temp_{Guid.NewGuid()}{Path.GetExtension(currentBeatmap.AudioFilename)}";
                             var tempPath = Path.Combine(resourcesPath, tempFileName);
 
                             File.Copy(audioFile, tempPath, true);
@@ -501,18 +539,11 @@ namespace storytor.Game.Screens
 
                     if (currentTrack == null)
                     {
-                        // Get file details for debugging
-                        Console.WriteLine($"File details:");
-                        Console.WriteLine($"  Path: {audioFile}");
-                        Console.WriteLine($"  Size: {fileInfo.Length} bytes");
-                        Console.WriteLine($"  Extension: {fileInfo.Extension}");
-                        Console.WriteLine($"  Exists: {fileInfo.Exists}");
-
-                        statusText.Text = $"Cannot load audio: {Path.GetFileName(audioFile)}. Check console for details.";
+                        statusText.Text = $"Cannot load audio: {currentBeatmap.AudioFilename}. Check console for details.";
                         return;
                     }
 
-                    statusText.Text = $"Audio loaded: {currentTrack.Length}ms duration";
+                    statusText.Text = $"Audio loaded: {currentTrack.Length}ms duration - {currentBeatmap}";
                 }
                 catch (Exception audioEx)
                 {
@@ -521,7 +552,8 @@ namespace storytor.Game.Screens
                     return;
                 }
 
-                // Load storyboard (if available)
+                // Load storyboard (look for .osb file automatically)
+                var osbFiles = Directory.GetFiles(folderPath, "*.osb");
                 if (osbFiles.Length > 0)
                 {
                     var osbFile = osbFiles.First();
@@ -531,19 +563,20 @@ namespace storytor.Game.Screens
 
                     if (currentStoryboard == null)
                     {
-                        statusText.Text = "Failed to load storyboard, but audio is ready!";
+                        statusText.Text = $"Failed to load storyboard, but audio is ready! - {currentBeatmap}";
                     }
                     else
                     {
-                        // Create storyboard renderer
-                        createStoryboardRenderer(folderPath);
-                        statusText.Text = $"Loaded: {currentStoryboard.Sprites.Count} sprites, {currentStoryboard.TotalCommands} commands";
+                        statusText.Text = $"Loaded: {currentStoryboard.Sprites.Count} sprites, {currentStoryboard.TotalCommands} commands - {currentBeatmap}";
                     }
                 }
                 else
                 {
-                    statusText.Text = "Audio loaded! No storyboard found (.osb file).";
+                    statusText.Text = $"Audio loaded! No storyboard found (.osb file) - {currentBeatmap}";
                 }
+
+                // Always create renderer (for background and/or storyboard)
+                createStoryboardRenderer(folderPath);
                 playPauseButton.Alpha = 1.0f; // Enable play button
 
             }
@@ -559,14 +592,22 @@ namespace storytor.Game.Screens
 
         private void createStoryboardRenderer(string basePath)
         {
-            if (currentStoryboard == null) return;
-
             // Clear existing content
             storyboardContainer.Clear();
 
-            // Create new renderer
-            storyboardRenderer = new StoryboardRenderer(currentStoryboard, basePath);
-            storyboardContainer.Add(storyboardRenderer);
+            // Create background renderer first (will be rendered behind everything)
+            if (currentBeatmap != null)
+            {
+                backgroundRenderer = new BeatmapBackgroundRenderer(currentBeatmap, currentStoryboard);
+                storyboardContainer.Add(backgroundRenderer);
+            }
+
+            // Create storyboard renderer if available
+            if (currentStoryboard != null)
+            {
+                storyboardRenderer = new StoryboardRenderer(currentStoryboard, basePath, currentBeatmap);
+                storyboardContainer.Add(storyboardRenderer);
+            }
         }
 
         private void togglePlayback()
